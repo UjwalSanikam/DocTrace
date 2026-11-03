@@ -1,0 +1,46 @@
+{
+  "database": "data/raw/DocTamperV1-TrainingSet",
+  "database_samples": 120000,
+  "seed": 2026,
+  "audited_samples": 12000,
+  "excluded_overfit_indices": [
+    3278,
+    11395,
+    13434,
+    14592,
+    18289,
+    29256,
+    32098,
+    36048,
+    71482,
+    77397,
+    83810,
+    88696,
+    96530,
+    97080,
+    97196,
+    116939
+  ],
+  "train_samples": 10000,
+  "validation_samples": 2000,
+  "groups": 10900,
+  "multi_sample_groups": 760,
+  "largest_group": 12,
+  "cross_split_exact_rgb_matches": 0,
+  "cross_split_exact_dhash_matches": 0,
+  "limitation": "PROVISIONAL development split: source-document IDs unavailable in image/label keys. Exact RGB and exact dHash grouping cannot exclude related crops, different edits, or all near-duplicates. No source-disjoint generalization claim. Audit covers only selected candidates.",
+  "train_mask_fraction": {
+    "min": 1.9073486328125e-05,
+    "median": 0.007198333740234375,
+    "mean": 0.018821799468994142,
+    "max": 0.4871673583984375,
+    "empty_masks": 0
+  },
+  "validation_mask_fraction": {
+    "min": 5.7220458984375e-05,
+    "median": 0.0070648193359375,
+    "mean": 0.017311796188354493,
+    "max": 0.24759674072265625,
+    "empty_masks": 0
+  }
+}

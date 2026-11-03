@@ -1,0 +1,29 @@
+{
+  "split": "outputs/split_v1",
+  "output": "outputs/baseline_v1",
+  "epochs": 5,
+  "batch_size": 4,
+  "workers": 2,
+  "lr": 0.0002,
+  "seed": 2026,
+  "smoke": false,
+  "train_samples": 10000,
+  "validation_samples": 2000,
+  "database": "data/raw/DocTamperV1-TrainingSet",
+  "precision": "float32",
+  "initialization": "random; no overfit weights",
+  "architecture": "SmallUNet(base=16)",
+  "loss": "BCE + per-image soft Dice",
+  "augmentation": "none",
+  "threshold": 0.5,
+  "torch_version": "2.14.1+cu130",
+  "gpu": "NVIDIA GeForce RTX 5080 Laptop GPU",
+  "split_limitation": "PROVISIONAL development split: source-document IDs unavailable in image/label keys. Exact RGB and exact dHash grouping cannot exclude related crops, different edits, or all near-duplicates. No source-disjoint generalization claim. Audit covers only selected candidates.",
+  "authentic_document_evaluation": false,
+  "manifest_hashes": {
+    "train_indices.json": "67a3c424e1877f6badb005f0ee9f15c0aedcb087d2f691a0e8ce4fa319f67e33",
+    "validation_indices.json": "8e6b192ebcaad5eb87b27d3d76c2b80327cf7740013b1006c9424b90ca964883",
+    "report.json": "1daec9e05e443dddf1a85db43fc8fdb98e5514be7e1735cedfffc6f8492a7862"
+  },
+  "provenance_note": "Original run used outputs/split_v1. Committed report normalizes the database path; its file hash therefore differs. Index manifests preserve the original sample lists."
+}
