@@ -1,4 +1,4 @@
-"""Fresh SmallUNet baseline on provisional train/validation manifests."""
+"""Train or continue segmentation baselines on provisional split manifests."""
 import argparse
 import csv
 from hashlib import sha256
@@ -16,7 +16,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Subset
 from doctrace.dataset import DocTamperDataset
-from doctrace.model import SmallUNet
+from doctrace.model import build_model
 from overfit_small import loss_fn, save_preview
 
 
@@ -90,6 +90,9 @@ def main():
     parser.add_argument("--lr", type=float, default=0.0002)
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--smoke", action="store_true", help="One epoch: 64 train / 32 validation; not a baseline result")
+    parser.add_argument("--model", choices=["small", "resnet18"], default="small")
+    parser.add_argument("--random-encoder", action="store_true", help="ResNet architecture control without ImageNet weights")
+    parser.add_argument("--resume", help="Checkpoint with model and AdamW state; --epochs is additional epochs")
     args = parser.parse_args()
     if args.epochs < 1 or args.batch_size < 1 or args.workers < 0 or args.lr <= 0:
         parser.error("Invalid training settings")
@@ -111,6 +114,21 @@ def main():
     if args.smoke:
         train_ids, val_ids = train_ids[:64], val_ids[:32]
         args.epochs = 1
+    resume = None
+    start_epoch = 0
+    if args.resume:
+        if args.smoke:
+            parser.error("Resume requires the complete original manifests; do not use --smoke")
+        resume_path = Path(args.resume)
+        resume = torch.load(resume_path, map_location="cpu", weights_only=True)
+        legacy_defaults = {"model": "small", "random_encoder": False}
+        for key in ("model", "batch_size", "lr", "seed", "random_encoder"):
+            if resume["config"].get(key, legacy_defaults.get(key)) != getattr(args, key):
+                parser.error(f"Resume setting mismatch: {key}")
+        for filename, active_ids in (("train_indices.json", train_ids), ("validation_indices.json", val_ids)):
+            if json.loads((resume_path.parent / filename).read_text()) != active_ids:
+                parser.error(f"Resume manifest mismatch: {filename}")
+        start_epoch = int(resume["epoch"])
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -121,8 +139,11 @@ def main():
         raise ValueError("Split indices out of range")
     output.mkdir(parents=True, exist_ok=True)
     config = vars(args) | {"train_samples": len(train_ids), "validation_samples": len(val_ids),
-        "database": report["database"], "precision": "float32", "initialization": "random; no overfit weights",
-        "architecture": "SmallUNet(base=16)", "loss": "BCE + per-image soft Dice", "augmentation": "none",
+        "database": report["database"], "precision": "float32", "initialization": "ImageNet ResNet18 encoder; random decoder" if args.model == "resnet18" and not args.random_encoder else "random; no overfit weights",
+        "architecture": "SmallUNet(base=16)" if args.model == "small" else "ResNet18UNet",
+        "encoder_batchnorm": "frozen running stats; trainable affine" if args.model == "resnet18" else "not applicable",
+        "normalization": "ImageNet mean/std inside model; no resize/crop" if args.model == "resnet18" else "RGB 0-1", "loss": "BCE + per-image soft Dice", "augmentation": "none",
+        "start_epoch": start_epoch, "resume_shuffle_note": "Legacy checkpoint lacks RNG state; shuffle stream restarted" if resume and "loader_rng" not in resume else "RNG state saved/restored",
         "threshold": 0.5, "torch_version": str(torch.__version__), "gpu": torch.cuda.get_device_name(0),
         "split_limitation": report["limitation"], "authentic_document_evaluation": False,
         "manifest_hashes": {name: sha256((split / name).read_bytes()).hexdigest()
@@ -136,16 +157,24 @@ def main():
     generator = torch.Generator().manual_seed(args.seed)
     train_loader = DataLoader(Subset(dataset, train_ids), shuffle=True, generator=generator, **common)
     val_loader = DataLoader(Subset(dataset, val_ids), shuffle=False, **common)
-    model = SmallUNet().to(device)
+    model = build_model(args.model, pretrained=resume is None and args.model == "resnet18" and not args.random_encoder).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0)
-    print(f"{'SMOKE CHECK' if args.smoke else 'BASELINE'} | fresh weights | float32 | train={len(train_ids)} val={len(val_ids)} epochs={args.epochs}", flush=True)
+    if resume is not None:
+        model.load_state_dict(resume["model"], strict=True)
+        optimizer.load_state_dict(resume["optimizer"])
+        if "loader_rng" in resume:
+            generator.set_state(resume["loader_rng"])
+            torch.set_rng_state(resume["torch_rng"])
+            torch.cuda.set_rng_state_all(resume["cuda_rng"])
+        print(f"Resumed model and optimizer after epoch {start_epoch}. {config['resume_shuffle_note']}", flush=True)
+    print(f"{'SMOKE CHECK' if args.smoke else 'BASELINE'} | model={args.model} | initialization={config['initialization']} | float32 | train={len(train_ids)} val={len(val_ids)} epochs={args.epochs}", flush=True)
     print("Provisional split; no claim of source-document separation. FCD is not accessed.", flush=True)
     best = -1.0
     history = []
     started = time.perf_counter()
     with (output / "metrics.csv").open("w", newline="", encoding="utf-8") as file:
         writer = None
-        for epoch in range(1, args.epochs + 1):
+        for epoch in range(start_epoch + 1, start_epoch + args.epochs + 1):
             model.train()
             running_loss, seen = 0.0, 0
             for step, batch in enumerate(train_loader, 1):
@@ -161,7 +190,7 @@ def main():
                 running_loss += loss.item() * len(x)
                 seen += len(x)
                 if step % 100 == 0 or step == len(train_loader):
-                    print(f"epoch {epoch}/{args.epochs} batch {step}/{len(train_loader)} train_loss={running_loss / seen:.4f}", flush=True)
+                    print(f"epoch {epoch}/{start_epoch + args.epochs} batch {step}/{len(train_loader)} train_loss={running_loss / seen:.4f}", flush=True)
             metrics, rows, previews = validate(model, val_loader, device)
             row = {"epoch": epoch, "train_loss": running_loss / seen,
                    **{"val_" + key: value for key, value in metrics.items()},
@@ -173,7 +202,9 @@ def main():
             writer.writerow(row)
             file.flush()
             state = {"model": model.state_dict(), "optimizer": optimizer.state_dict(),
-                     "epoch": epoch, "config": config, "metrics": metrics}
+                     "epoch": epoch, "config": config, "metrics": metrics,
+                     "loader_rng": generator.get_state(), "torch_rng": torch.get_rng_state(),
+                     "cuda_rng": torch.cuda.get_rng_state_all()}
             torch.save(state, output / "last.pt")
             write_rows(output / "last_validation_per_image.csv", sorted(rows, key=lambda row: row["dice"]))
             if metrics["macro_dice"] > best:

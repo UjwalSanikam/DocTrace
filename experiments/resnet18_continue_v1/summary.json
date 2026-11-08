@@ -1,0 +1,73 @@
+{
+  "experiment": "Three additional epochs with unchanged training settings",
+  "parent_run": "resnet18_v1",
+  "parent_checkpoint_epoch": 5,
+  "parent_checkpoint_sha256": "7d9da9a5b8ce5d3bcdd7b1e8c8be5af534328e6ce3669a784ce788e572b7297e",
+  "resume_note": "Model and AdamW state restored. Legacy checkpoint had no RNG state; shuffle stream restarted with seed 2026. Not a bitwise continuation of an uninterrupted run.",
+  "best_epoch": 8,
+  "checkpoint_sha256": "e11f09c234560ed04668bb41538fab82990aa4e3470cb7c257c8603baa9c460b",
+  "validation": {
+    "count": 2000,
+    "macro_dice": 0.4723752907900713,
+    "macro_iou": 0.38542952046818996,
+    "micro_precision": 0.5303949542294235,
+    "micro_recall": 0.5468258390168665
+  },
+  "training_subset": {
+    "loss": 0.5566306780725717,
+    "macro_dice": 0.511068767729853,
+    "macro_iou": 0.41956801153381224,
+    "micro_precision": 0.551465500817231,
+    "micro_recall": 0.5490307654295106
+  },
+  "training_subset_count": 2000,
+  "training_subset_seed": 73,
+  "train_minus_validation_dice": 0.0386934769397817,
+  "zero_overlap_images": 428,
+  "by_target_area": {
+    "under 0.1%": {
+      "count": 120,
+      "macro_dice": 0.04355173336031427,
+      "macro_iou": 0.03265490456351334,
+      "micro_precision": 0.011242238340423594,
+      "micro_recall": 0.15945009106397978
+    },
+    "0.1% to under 1%": {
+      "count": 1120,
+      "macro_dice": 0.44144949093157226,
+      "macro_iou": 0.36282366266556126,
+      "micro_precision": 0.3534094514073985,
+      "micro_recall": 0.5088237607476842
+    },
+    "1% to under 5%": {
+      "count": 584,
+      "macro_dice": 0.5969290839167369,
+      "macro_iou": 0.48917333981128003,
+      "micro_precision": 0.5675299235060591,
+      "micro_recall": 0.590578346972013
+    },
+    "5% or more": {
+      "count": 176,
+      "macro_dice": 0.5482634018532362,
+      "macro_iou": 0.4255722713269437,
+      "micro_precision": 0.6288932286707528,
+      "micro_recall": 0.5304737940680638
+    }
+  },
+  "comparison_with_previous_best": {
+    "previous_epoch": 4,
+    "previous_checkpoint_sha256": "69982efacd04a7041f0f70baa46abec291185ae5f8856d9e0e5b91bab3c1528d",
+    "dice_change": 0.10389247494588594,
+    "zero_overlap_change": -50
+  },
+  "split_limitation": "PROVISIONAL development split: source-document IDs unavailable in image/label keys. Exact RGB and exact dHash grouping cannot exclude related crops, different edits, or all near-duplicates. No source-disjoint generalization claim. Audit covers only selected candidates.",
+  "authentic_document_evaluation": false,
+  "fcd_accessed": false,
+  "verification": {
+    "finite_checkpoint_weights": true,
+    "optimizer_state_present": true,
+    "rng_states_restore_successfully": true,
+    "preview_count_matches": 16,
+    "resume_rejects_changed_batch_size": true
+  }
+}

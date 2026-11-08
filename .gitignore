@@ -13,3 +13,6 @@ __pycache__/
 *.pth
 *.ckpt
 .vscode/
+
+/.runtime/
+/work/

@@ -1,0 +1,49 @@
+{
+  "best_epoch": 4,
+  "validation": {
+    "count": 2000,
+    "macro_dice": 0.36848281584418535,
+    "macro_iou": 0.28566481670286137,
+    "micro_precision": 0.3332227165682233,
+    "micro_recall": 0.5316968782773989
+  },
+  "training_subset": {
+    "loss": 0.7049726749360561,
+    "macro_dice": 0.3845197096502485,
+    "macro_iou": 0.29840746556182407,
+    "micro_precision": 0.33795488383523264,
+    "micro_recall": 0.5255716656081322
+  },
+  "zero_overlap_images": 478,
+  "by_target_area": {
+    "under 0.1%": {
+      "count": 120,
+      "macro_dice": 0.017483133484948905,
+      "macro_iou": 0.009398841269415878,
+      "micro_precision": 0.0066901376947096245,
+      "micro_recall": 0.17572410551671463
+    },
+    "0.1% to under 1%": {
+      "count": 1120,
+      "macro_dice": 0.30717002866074705,
+      "macro_iou": 0.23347635558741564,
+      "micro_precision": 0.16079032713164831,
+      "micro_recall": 0.47140850376229315
+    },
+    "1% to under 5%": {
+      "count": 584,
+      "macro_dice": 0.5177562668757878,
+      "macro_iou": 0.4166936520329127,
+      "micro_precision": 0.3795111117030841,
+      "micro_recall": 0.588917096700332
+    },
+    "5% or more": {
+      "count": 176,
+      "macro_dice": 0.5026566120152274,
+      "macro_iou": 0.37135887163787606,
+      "micro_precision": 0.46498126382125693,
+      "micro_recall": 0.5131435663800673
+    }
+  },
+  "split_limitation": "PROVISIONAL development split: source-document IDs unavailable in image/label keys. Exact RGB and exact dHash grouping cannot exclude related crops, different edits, or all near-duplicates. No source-disjoint generalization claim. Audit covers only selected candidates."
+}
