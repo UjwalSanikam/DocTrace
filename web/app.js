@@ -13,6 +13,7 @@ const state = {
   busy: false,
   ready: false,
   selectedRegionIndex: null,
+  interactiveRegionResult: null,
   interactiveRegions: [],
   interactiveStats: null
 };
@@ -84,174 +85,6 @@ function chooseView(view) {
     tab.setAttribute("tabindex", isSelected ? "0" : "-1");
   });
   render();
-}
-
-/**
- * Fast 4-connectivity connected-component extraction on quantized 8-bit probability map.
- */
-function extractRegions(probData, width, height, threshold, maxRegions = 10) {
-  const cutoff = Math.ceil(threshold * 255);
-  const totalPixels = width * height;
-  const labels = new Int32Array(totalPixels);
-  const parent = [0];
-  let nextLabel = 1;
-
-  for (let y = 0; y < height; y++) {
-    const rowOffset = y * width;
-    for (let x = 0; x < width; x++) {
-      const idx = rowOffset + x;
-      // Probability stored in red channel (idx * 4)
-      if (probData[idx * 4] < cutoff) continue;
-
-      const up = y > 0 ? labels[idx - width] : 0;
-      const left = x > 0 ? labels[idx - 1] : 0;
-
-      if (up === 0 && left === 0) {
-        parent.push(nextLabel);
-        labels[idx] = nextLabel;
-        nextLabel++;
-      } else if (up === 0) {
-        let r = left;
-        while (parent[r] !== r) r = parent[r];
-        labels[idx] = r;
-      } else if (left === 0) {
-        let r = up;
-        while (parent[r] !== r) r = parent[r];
-        labels[idx] = r;
-      } else {
-        let ru = up;
-        while (parent[ru] !== ru) ru = parent[ru];
-        let rl = left;
-        while (parent[rl] !== rl) rl = parent[rl];
-        labels[idx] = ru;
-        if (ru !== rl) {
-          parent[rl] = ru;
-        }
-      }
-    }
-  }
-
-  if (nextLabel === 1) {
-    return { total_count: 0, returned_count: 0, truncated: false, threshold, regions: [] };
-  }
-
-  // Flatten parent pointers
-  for (let i = 1; i < parent.length; i++) {
-    let r = i;
-    while (parent[r] !== r) r = parent[r];
-    parent[i] = r;
-  }
-
-  // Remap roots to 1..numComponents
-  const rootMap = new Map();
-  let numComponents = 0;
-  for (let i = 1; i < parent.length; i++) {
-    const r = parent[i];
-    if (!rootMap.has(r)) {
-      numComponents++;
-      rootMap.set(r, numComponents);
-    }
-  }
-
-  // Aggregate stats in a single pass
-  const areas = new Uint32Array(numComponents + 1);
-  const sums = new Float64Array(numComponents + 1);
-  const yMin = new Int32Array(numComponents + 1).fill(height);
-  const yMax = new Int32Array(numComponents + 1).fill(-1);
-  const xMin = new Int32Array(numComponents + 1).fill(width);
-  const xMax = new Int32Array(numComponents + 1).fill(-1);
-
-  for (let y = 0; y < height; y++) {
-    const rowOffset = y * width;
-    for (let x = 0; x < width; x++) {
-      const idx = rowOffset + x;
-      const rawLab = labels[idx];
-      if (rawLab === 0) continue;
-      const cid = rootMap.get(parent[rawLab]);
-      areas[cid]++;
-      sums[cid] += probData[idx * 4] / 255;
-      if (y < yMin[cid]) yMin[cid] = y;
-      if (y > yMax[cid]) yMax[cid] = y;
-      if (x < xMin[cid]) xMin[cid] = x;
-      if (x > xMax[cid]) xMax[cid] = x;
-    }
-  }
-
-  // Deterministic sort: area desc, mean response desc, yMin asc, xMin asc
-  const indices = [];
-  for (let c = 1; c <= numComponents; c++) {
-    indices.push(c);
-  }
-  indices.sort((a, b) => {
-    if (areas[b] !== areas[a]) return areas[b] - areas[a];
-    const meanB = sums[b] / areas[b];
-    const meanA = sums[a] / areas[a];
-    if (meanB !== meanA) return meanB - meanA;
-    if (yMin[a] !== yMin[b]) return yMin[a] - yMin[b];
-    if (xMin[a] !== xMin[b]) return xMin[a] - xMin[b];
-    if (yMax[a] !== yMax[b]) return yMax[a] - yMax[b];
-    return xMax[a] - xMax[b];
-  });
-
-  const limit = maxRegions === null ? numComponents : Math.min(maxRegions, numComponents);
-  const regions = [];
-  for (let rank = 1; rank <= limit; rank++) {
-    const cid = indices[rank - 1];
-    const area = areas[cid];
-    const meanResp = Number((sums[cid] / area).toFixed(4));
-    regions.push({
-      rank,
-      area_px: area,
-      area_fraction: Number((area / totalPixels).toFixed(6)),
-      mean_model_response: meanResp,
-      mean_confidence: meanResp, // backward compatibility
-      bbox: [yMin[cid], xMin[cid], yMax[cid], xMax[cid]]
-    });
-  }
-
-  return {
-    total_count: numComponents,
-    returned_count: regions.length,
-    truncated: numComponents > regions.length,
-    threshold,
-    regions
-  };
-}
-
-function calculateMeasures(threshold) {
-  const cutoff = Math.ceil(threshold * 255);
-  const count = state.probability.width * state.probability.height;
-  let positive = 0;
-  let jpeg70Flips = 0;
-  let largeResponseChanges = 0;
-  const changeCutoff = Math.ceil(0.10 * 255);
-
-  const probData = state.probability.data;
-  const altData = state.alternative ? state.alternative.data : null;
-  const worstData = state.worst_case ? state.worst_case.data : null;
-
-  for (let i = 0; i < count * 4; i += 4) {
-    const p = probData[i];
-    const active = p >= cutoff;
-    if (active) positive++;
-
-    if (altData) {
-      const altActive = altData[i] >= cutoff;
-      if (active !== altActive) jpeg70Flips++;
-    }
-
-    if (worstData && worstData[i] >= changeCutoff) {
-      largeResponseChanges++;
-    }
-  }
-
-  return {
-    threshold,
-    flagged_pixel_fraction: positive / count,
-    jpeg70_threshold_flip_fraction: altData ? jpeg70Flips / count : null,
-    worst_case_large_response_change_fraction: worstData ? largeResponseChanges / count : null,
-    response_change_cutoff: 0.10
-  };
 }
 
 function draw(view, threshold) {
@@ -432,7 +265,14 @@ function render() {
   el("legend-text").textContent = state.result ? legends[state.view] : "Image loaded · ready for analysis";
 
   if (state.probability) {
-    const stats = calculateMeasures(displayThreshold);
+    const stats = calculateMeasures(
+      state.probability.data,
+      state.alternative ? state.alternative.data : null,
+      state.worst_case ? state.worst_case.data : null,
+      state.original.width,
+      state.original.height,
+      displayThreshold
+    );
     state.interactiveStats = stats;
     el("area").textContent = pct(stats.flagged_pixel_fraction);
     el("area-sub").textContent = `at display threshold ${displayThreshold.toFixed(2)}`;
@@ -450,6 +290,7 @@ function render() {
 
     // Recompute interactive regions at the current display threshold
     const extraction = extractRegions(state.probability.data, state.original.width, state.original.height, displayThreshold, 10);
+    state.interactiveRegionResult = extraction;
     state.interactiveRegions = extraction.regions;
     renderRegionsUI(extraction);
   }
@@ -478,6 +319,7 @@ async function selectFile(file) {
     state.worst_case = null;
     state.ela_residual = null;
     state.selectedRegionIndex = null;
+    state.interactiveRegionResult = null;
     state.interactiveRegions = [];
     state.interactiveStats = null;
 
@@ -678,61 +520,29 @@ el("save-sensitivity-jpeg70").addEventListener("click", () => {
 el("save-report").addEventListener("click", () => {
   if (!state.result) return;
   const displayThreshold = Number(el("threshold").value) / 100;
-  const currentStats = calculateMeasures(displayThreshold);
-  const currentRegions = state.interactiveRegions || [];
+  const currentStats = state.interactiveStats || calculateMeasures(
+    state.probability.data,
+    state.alternative ? state.alternative.data : null,
+    state.worst_case ? state.worst_case.data : null,
+    state.original.width,
+    state.original.height,
+    displayThreshold
+  );
+  const currentExtraction = state.interactiveRegionResult || extractRegions(
+    state.probability.data,
+    state.original.width,
+    state.original.height,
+    displayThreshold,
+    10
+  );
 
-  // Construct structured export with explicit server_analysis and interactive_inspection sections
-  const reportExport = {
-    schema_version: 3,
-    model: state.result.model,
-    epoch: state.result.epoch,
-    checkpoint_sha256: state.result.checkpoint_sha256,
-    device: state.result.device,
-    tile_size: state.result.tile_size,
-    stride: state.result.stride,
-    width: state.result.width,
-    height: state.result.height,
-    tiles: state.result.tiles,
-    elapsed_seconds: state.result.elapsed_seconds,
-    input_name: state.file ? state.file.name : "unknown",
-
-    // Immutable full-precision server analysis at analysis_threshold (0.50)
-    server_analysis: {
-      threshold: state.result.threshold,
-      precision: "float32",
-      flagged_pixel_fraction: state.result.flagged_pixel_fraction,
-      regions: state.result.regions,
-      total_regions_count: state.result.total_regions_count,
-      returned_regions_count: state.result.returned_regions_count,
-      regions_truncated: state.result.regions_truncated,
-      ela: state.result.ela,
-      probe: state.result.probe,
-      multi_probe: state.result.multi_probe
-    },
-
-    // Interactive inspection recomputed on 8-bit quantized probability map at display_threshold
-    interactive_inspection: {
-      threshold: displayThreshold,
-      quantization: "8-bit display map (values rounded to 1/255)",
-      flagged_pixel_fraction: currentStats.flagged_pixel_fraction,
-      regions: currentRegions,
-      total_regions_count: currentRegions.length,
-      returned_regions_count: currentRegions.length,
-      regions_truncated: false,
-      jpeg70_probe: currentStats.jpeg70_threshold_flip_fraction !== null ? {
-        condition: "jpeg70",
-        threshold: displayThreshold,
-        threshold_flip_fraction: currentStats.jpeg70_threshold_flip_fraction
-      } : null,
-      large_response_change: currentStats.worst_case_large_response_change_fraction !== null ? {
-        response_change_cutoff: currentStats.response_change_cutoff,
-        worst_case_large_response_change_fraction: currentStats.worst_case_large_response_change_fraction
-      } : null
-    },
-
-    interpretation: state.result.interpretation,
-    limitations: state.result.limitations
-  };
+  const reportExport = buildReportExport({
+    serverAnalysis: state.result,
+    interactiveStats: currentStats,
+    interactiveRegionResult: currentExtraction,
+    displayThreshold: displayThreshold,
+    inputName: state.file ? state.file.name : "unknown"
+  });
 
   downloadBlob(
     new Blob([JSON.stringify(reportExport, null, 2)], { type: "application/json" }),

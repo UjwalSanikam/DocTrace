@@ -27,6 +27,14 @@ CANDIDATES = [
 ]
 
 
+EXPECTED_PROTOCOL = (
+    "Frozen weights, native 512x512 images, no tuning. "
+    "JPEG uses Pillow quality and 4:2:0 subsampling; "
+    "resize is bicubic down/up to original grid; "
+    "blur radius 0.7. Masks unchanged."
+)
+
+
 class ProvenanceError(Exception):
     """Raised when evaluation inputs, hashes, or manifests do not match recorded provenance."""
     pass
@@ -84,19 +92,20 @@ def evaluate(run, checkpoint, output, suite="validation", conditions=CONDITIONS,
     # 5. Manifest identity and sample counts
     if suite == "validation":
         val_indices_file = ROOT / run / "validation_indices.json"
-        if val_indices_file.is_file():
-            val_indices = json.loads(val_indices_file.read_text(encoding="utf-8"))
-            expected_manifest_hash = sha256(json.dumps(val_indices).encode()).hexdigest()
-            if report.get("index_manifest_sha256") != expected_manifest_hash:
+        if not val_indices_file.is_file():
+            raise ProvenanceError(f"Required validation manifest missing: {val_indices_file}")
+        val_indices = json.loads(val_indices_file.read_text(encoding="utf-8"))
+        expected_manifest_hash = sha256(json.dumps(val_indices).encode()).hexdigest()
+        if report.get("index_manifest_sha256") != expected_manifest_hash:
+            raise ProvenanceError(
+                f"Index manifest hash mismatch for {output}: expected {expected_manifest_hash}, got {report.get('index_manifest_sha256')}"
+            )
+        for cond in conditions:
+            count = report["conditions"][cond].get("count")
+            if count != len(val_indices):
                 raise ProvenanceError(
-                    f"Index manifest hash mismatch for {output}: expected {expected_manifest_hash}, got {report.get('index_manifest_sha256')}"
+                    f"Sample count mismatch in condition {cond} for {output}: expected {len(val_indices)}, got {count}"
                 )
-            for cond in conditions:
-                count = report["conditions"][cond].get("count")
-                if count != len(val_indices):
-                    raise ProvenanceError(
-                        f"Sample count mismatch in condition {cond} for {output}: expected {len(val_indices)}, got {count}"
-                    )
     elif suite == "fcd":
         for cond in conditions:
             count = report["conditions"][cond].get("count")
@@ -107,6 +116,24 @@ def evaluate(run, checkpoint, output, suite="validation", conditions=CONDITIONS,
             count = report["conditions"][cond].get("count")
             if count != 64:
                 raise ProvenanceError(f"Synthetic sample count mismatch in {cond}: expected 64, got {count}")
+
+    # 6. Transformation parameters and suite configuration
+    # Legacy Provenance Note:
+    # Historical v1 evaluation reports (outputs/*_robustness_v1/summary.json) record transformation
+    # specifications and evaluation parameters inside top-level fields (protocol, threshold, batch_size)
+    # rather than per-condition parameter dictionaries. To preserve historical reports without
+    # silently inventing synthetic metadata, we validate these recorded parameters against EXPECTED_PROTOCOL.
+    report_protocol = report.get("protocol")
+    if report_protocol != EXPECTED_PROTOCOL:
+        raise ProvenanceError(
+            f"Protocol/transformation parameter mismatch for {output}: "
+            f"expected '{EXPECTED_PROTOCOL}', got '{report_protocol}'"
+        )
+
+    if "batch_size" in report and report["batch_size"] != 4:
+        raise ProvenanceError(
+            f"Batch size mismatch for {output}: expected 4, got {report.get('batch_size')}"
+        )
 
     return report
 

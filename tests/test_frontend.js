@@ -1,175 +1,13 @@
 /**
  * Frontend logic regression test suite for DocTrace.
- * Exercises client-side region extraction, measure calculations,
- * and report export formatting without requiring a browser DOM.
+ * Imports actual production logic from web/analysis.js.
  */
 "use strict";
 
 const assert = require("assert");
+const { extractRegions, calculateMeasures, buildReportExport } = require("../web/analysis.js");
 
-// Pure JS implementations mirroring web/app.js:
-
-function extractRegions(probData, width, height, threshold, maxRegions = 10) {
-  const cutoff = Math.ceil(threshold * 255);
-  const totalPixels = width * height;
-  const labels = new Int32Array(totalPixels);
-  const parent = [0];
-  let nextLabel = 1;
-
-  for (let y = 0; y < height; y++) {
-    const rowOffset = y * width;
-    for (let x = 0; x < width; x++) {
-      const idx = rowOffset + x;
-      if (probData[idx * 4] < cutoff) continue;
-
-      const up = y > 0 ? labels[idx - width] : 0;
-      const left = x > 0 ? labels[idx - 1] : 0;
-
-      if (up === 0 && left === 0) {
-        parent.push(nextLabel);
-        labels[idx] = nextLabel;
-        nextLabel++;
-      } else if (up === 0) {
-        let r = left;
-        while (parent[r] !== r) r = parent[r];
-        labels[idx] = r;
-      } else if (left === 0) {
-        let r = up;
-        while (parent[r] !== r) r = parent[r];
-        labels[idx] = r;
-      } else {
-        let ru = up;
-        while (parent[ru] !== ru) ru = parent[ru];
-        let rl = left;
-        while (parent[rl] !== rl) rl = parent[rl];
-        labels[idx] = ru;
-        if (ru !== rl) {
-          parent[rl] = ru;
-        }
-      }
-    }
-  }
-
-  if (nextLabel === 1) {
-    return { total_count: 0, returned_count: 0, truncated: false, threshold, regions: [] };
-  }
-
-  for (let i = 1; i < parent.length; i++) {
-    let r = i;
-    while (parent[r] !== r) r = parent[r];
-    parent[i] = r;
-  }
-
-  const rootMap = new Map();
-  let numComponents = 0;
-  for (let i = 1; i < parent.length; i++) {
-    const r = parent[i];
-    if (!rootMap.has(r)) {
-      numComponents++;
-      rootMap.set(r, numComponents);
-    }
-  }
-
-  const areas = new Uint32Array(numComponents + 1);
-  const sums = new Float64Array(numComponents + 1);
-  const yMin = new Int32Array(numComponents + 1).fill(height);
-  const yMax = new Int32Array(numComponents + 1).fill(-1);
-  const xMin = new Int32Array(numComponents + 1).fill(width);
-  const xMax = new Int32Array(numComponents + 1).fill(-1);
-
-  for (let y = 0; y < height; y++) {
-    const rowOffset = y * width;
-    for (let x = 0; x < width; x++) {
-      const idx = rowOffset + x;
-      const rawLab = labels[idx];
-      if (rawLab === 0) continue;
-      const cid = rootMap.get(parent[rawLab]);
-      areas[cid]++;
-      sums[cid] += probData[idx * 4] / 255;
-      if (y < yMin[cid]) yMin[cid] = y;
-      if (y > yMax[cid]) yMax[cid] = y;
-      if (x < xMin[cid]) xMin[cid] = x;
-      if (x > xMax[cid]) xMax[cid] = x;
-    }
-  }
-
-  const indices = [];
-  for (let c = 1; c <= numComponents; c++) {
-    indices.push(c);
-  }
-  indices.sort((a, b) => {
-    if (areas[b] !== areas[a]) return areas[b] - areas[a];
-    const meanB = sums[b] / areas[b];
-    const meanA = sums[a] / areas[a];
-    if (meanB !== meanA) return meanB - meanA;
-    if (yMin[a] !== yMin[b]) return yMin[a] - yMin[b];
-    if (xMin[a] !== xMin[b]) return xMin[a] - xMin[b];
-    if (yMax[a] !== yMax[b]) return yMax[a] - yMax[b];
-    return xMax[a] - xMax[b];
-  });
-
-  const limit = maxRegions === null ? numComponents : Math.min(maxRegions, numComponents);
-  const regions = [];
-  for (let rank = 1; rank <= limit; rank++) {
-    const cid = indices[rank - 1];
-    const area = areas[cid];
-    const meanResp = Number((sums[cid] / area).toFixed(4));
-    regions.push({
-      rank,
-      area_px: area,
-      area_fraction: Number((area / totalPixels).toFixed(6)),
-      mean_model_response: meanResp,
-      mean_confidence: meanResp,
-      bbox: [yMin[cid], xMin[cid], yMax[cid], xMax[cid]]
-    });
-  }
-
-  return {
-    total_count: numComponents,
-    returned_count: regions.length,
-    truncated: numComponents > regions.length,
-    threshold,
-    regions
-  };
-}
-
-function calculateMeasures(probData, altData, worstData, width, height, threshold) {
-  const cutoff = Math.ceil(threshold * 255);
-  const count = width * height;
-  let positive = 0;
-  let jpeg70Flips = 0;
-  let largeResponseChanges = 0;
-  const changeCutoff = Math.ceil(0.10 * 255);
-
-  for (let i = 0; i < count * 4; i += 4) {
-    const p = probData[i];
-    const active = p >= cutoff;
-    if (active) positive++;
-
-    if (altData) {
-      const altActive = altData[i] >= cutoff;
-      if (active !== altActive) jpeg70Flips++;
-    }
-
-    if (worstData && worstData[i] >= changeCutoff) {
-      largeResponseChanges++;
-    }
-  }
-
-  return {
-    threshold,
-    flagged_pixel_fraction: positive / count,
-    jpeg70_threshold_flip_fraction: altData ? jpeg70Flips / count : null,
-    worst_case_large_response_change_fraction: worstData ? largeResponseChanges / count : null,
-    response_change_cutoff: 0.10
-  };
-}
-
-// ----------------------------------------------------
-// Tests
-// ----------------------------------------------------
-
-console.log("Running DocTrace frontend regression tests...");
+console.log("Running DocTrace frontend regression tests (using production web/analysis.js)...");
 
 // Test 1: extractRegions with empty data
 {
@@ -279,54 +117,147 @@ console.log("Running DocTrace frontend regression tests...");
   console.log("✓ Test 5: calculateMeasures metrics arithmetic passed");
 }
 
-// Test 6: Report export schema separates server_analysis from interactive_inspection
+// Test 6: Regression with >= 12 disconnected regions and limit of 10
 {
+  const width = 30, height = 30;
+  const probData = new Uint8ClampedArray(width * height * 4);
+  // Create exactly 12 isolated single pixels, well separated (step of 2 along x and y)
+  // Ensure each pixel has prob 0.90 (val 230)
+  for (let i = 0; i < 12; i++) {
+    const y = (i % 4) * 6 + 1;
+    const x = Math.floor(i / 4) * 8 + 1;
+    const idx = (y * width + x) * 4;
+    probData[idx] = 230;
+  }
+
+  const res = extractRegions(probData, width, height, 0.50, 10);
+  assert.strictEqual(res.total_count, 12, "Should find 12 total components");
+  assert.strictEqual(res.returned_count, 10, "Should cap returned list to 10");
+  assert.strictEqual(res.truncated, true, "Should report truncated: true");
+  assert.strictEqual(res.regions.length, 10, "regions array should have length 10");
+
   const mockServerAnalysis = {
+    schema_version: 3,
+    model: "ResNet18UNet",
+    epoch: 10,
+    checkpoint_sha256: "testsha256",
+    device: "cpu",
+    tile_size: 512,
+    stride: 384,
+    width,
+    height,
+    tiles: 1,
+    elapsed_seconds: 0.12,
     threshold: 0.50,
-    flagged_pixel_fraction: 0.15,
-    regions: [{ rank: 1, area_px: 150 }],
-    total_regions_count: 1,
+    flagged_pixel_fraction: 12 / (width * height),
+    regions: [{ rank: 1, area_px: 1, area_fraction: 1 / 900, mean_model_response: 0.9, mean_confidence: 0.9, bbox: [1, 1, 1, 1] }],
+    total_regions_count: 12,
     returned_regions_count: 1,
-    regions_truncated: false
+    regions_truncated: true,
+    ela: { quality: 90 },
+    probe: null,
+    multi_probe: null,
+    interpretation: "prototype",
+    limitations: "limitations"
   };
 
-  const displayThreshold = 0.80;
-  const mockInteractiveStats = {
-    flagged_pixel_fraction: 0.04,
-    jpeg70_threshold_flip_fraction: 0.02,
-    worst_case_large_response_change_fraction: 0.05,
+  const mockStats = {
+    threshold: 0.50,
+    flagged_pixel_fraction: 12 / (width * height),
+    jpeg70_threshold_flip_fraction: null,
+    worst_case_large_response_change_fraction: null,
     response_change_cutoff: 0.10
   };
-  const mockInteractiveRegions = [{ rank: 1, area_px: 40 }];
 
-  const reportExport = {
+  const reportExport = buildReportExport({
+    serverAnalysis: mockServerAnalysis,
+    interactiveStats: mockStats,
+    interactiveRegionResult: res,
+    displayThreshold: 0.50,
+    inputName: "doc12.png"
+  });
+
+  // Verify full client-side extraction result is preserved in export:
+  assert.strictEqual(reportExport.interactive_inspection.total_regions_count, 12, "Exported total_regions_count must be 12 (not derived from capped array length 10)");
+  assert.strictEqual(reportExport.interactive_inspection.returned_regions_count, 10, "Exported returned_regions_count must be 10");
+  assert.strictEqual(reportExport.interactive_inspection.regions_truncated, true, "Exported regions_truncated must be true");
+  assert.strictEqual(reportExport.interactive_inspection.regions.length, 10);
+  assert.strictEqual(reportExport.input_name, "doc12.png");
+
+  console.log("✓ Test 6: 12 regions with limit 10 regression passed (total=12, returned=10, truncated=true)");
+}
+
+// Test 7: Real report builder preserves immutable server-analysis fields
+{
+  const mockServerAnalysis = {
     schema_version: 3,
-    server_analysis: {
-      threshold: mockServerAnalysis.threshold,
-      precision: "float32",
-      flagged_pixel_fraction: mockServerAnalysis.flagged_pixel_fraction,
-      regions: mockServerAnalysis.regions
-    },
-    interactive_inspection: {
-      threshold: displayThreshold,
-      quantization: "8-bit display map (values rounded to 1/255)",
-      flagged_pixel_fraction: mockInteractiveStats.flagged_pixel_fraction,
-      regions: mockInteractiveRegions,
-      jpeg70_probe: {
-        condition: "jpeg70",
-        threshold: displayThreshold,
-        threshold_flip_fraction: mockInteractiveStats.jpeg70_threshold_flip_fraction
-      }
-    }
+    model: "ResNet18UNet",
+    epoch: 8,
+    checkpoint_sha256: "abc123hash",
+    device: "cuda",
+    tile_size: 512,
+    stride: 384,
+    width: 512,
+    height: 512,
+    tiles: 1,
+    elapsed_seconds: 0.35,
+    threshold: 0.50,
+    flagged_pixel_fraction: 0.05,
+    regions: [{ rank: 1, area_px: 1300 }],
+    total_regions_count: 1,
+    returned_regions_count: 1,
+    regions_truncated: false,
+    ela: { quality: 90, amplification: 15 },
+    probe: { condition: "jpeg70", threshold: 0.50 },
+    multi_probe: { threshold: 0.50, worst_case_threshold_flip_fraction: 0.03 },
+    interpretation: "test interpretation",
+    limitations: "test limitations"
   };
 
-  assert.strictEqual(reportExport.server_analysis.threshold, 0.50);
-  assert.strictEqual(reportExport.interactive_inspection.threshold, 0.80);
-  assert.strictEqual(reportExport.server_analysis.flagged_pixel_fraction, 0.15);
-  assert.strictEqual(reportExport.interactive_inspection.flagged_pixel_fraction, 0.04);
-  assert.strictEqual(reportExport.interactive_inspection.jpeg70_probe.threshold, 0.80);
+  const displayThreshold = 0.85;
+  const mockInteractiveStats = {
+    threshold: displayThreshold,
+    flagged_pixel_fraction: 0.008,
+    jpeg70_threshold_flip_fraction: 0.005,
+    worst_case_large_response_change_fraction: 0.02,
+    response_change_cutoff: 0.10
+  };
+  const mockInteractiveExtraction = {
+    total_count: 3,
+    returned_count: 3,
+    truncated: false,
+    threshold: displayThreshold,
+    regions: [{ rank: 1, area_px: 200 }, { rank: 2, area_px: 100 }, { rank: 3, area_px: 50 }]
+  };
 
-  console.log("✓ Test 6: Report export schema separation passed");
+  const reportExport = buildReportExport({
+    serverAnalysis: mockServerAnalysis,
+    interactiveStats: mockInteractiveStats,
+    interactiveRegionResult: mockInteractiveExtraction,
+    displayThreshold: displayThreshold,
+    inputName: "receipt.png"
+  });
+
+  // Verify server_analysis remains strictly immutable at 0.50
+  assert.strictEqual(reportExport.server_analysis.threshold, 0.50);
+  assert.strictEqual(reportExport.server_analysis.precision, "float32");
+  assert.strictEqual(reportExport.server_analysis.flagged_pixel_fraction, 0.05);
+  assert.strictEqual(reportExport.server_analysis.total_regions_count, 1);
+  assert.deepStrictEqual(reportExport.server_analysis.regions, mockServerAnalysis.regions);
+  assert.deepStrictEqual(reportExport.server_analysis.ela, mockServerAnalysis.ela);
+  assert.deepStrictEqual(reportExport.server_analysis.probe, mockServerAnalysis.probe);
+  assert.deepStrictEqual(reportExport.server_analysis.multi_probe, mockServerAnalysis.multi_probe);
+
+  // Verify interactive_inspection corresponds to displayThreshold 0.85
+  assert.strictEqual(reportExport.interactive_inspection.threshold, 0.85);
+  assert.strictEqual(reportExport.interactive_inspection.flagged_pixel_fraction, 0.008);
+  assert.strictEqual(reportExport.interactive_inspection.total_regions_count, 3);
+  assert.strictEqual(reportExport.interactive_inspection.returned_regions_count, 3);
+  assert.strictEqual(reportExport.interactive_inspection.regions_truncated, false);
+  assert.strictEqual(reportExport.interactive_inspection.jpeg70_probe.threshold, 0.85);
+  assert.strictEqual(reportExport.interactive_inspection.jpeg70_probe.threshold_flip_fraction, 0.005);
+
+  console.log("✓ Test 7: Immutable server-analysis fields preserved across display threshold changes passed");
 }
 
 console.log("All DocTrace frontend tests passed successfully!");

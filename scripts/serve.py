@@ -51,8 +51,13 @@ def make_handler(predictor, port):
                 self.respond(200, predictor.metadata)
             elif route == "/api/sample":
                 self.respond(200, png_bytes(make_document(7)), "image/png")
-            elif route in ("/", "/app.js", "/style.css"):
-                name, kind = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"), "/style.css": ("style.css", "text/css; charset=utf-8")}[route]
+            elif route in ("/", "/app.js", "/analysis.js", "/style.css"):
+                name, kind = {
+                    "/": ("index.html", "text/html; charset=utf-8"),
+                    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                    "/analysis.js": ("analysis.js", "text/javascript; charset=utf-8"),
+                    "/style.css": ("style.css", "text/css; charset=utf-8"),
+                }[route]
                 self.respond(200, (WEB / name).read_bytes(), kind)
             else:
                 self.respond(404, {"error": "Not found"})

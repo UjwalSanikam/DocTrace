@@ -139,15 +139,26 @@ class HTTPTests(unittest.TestCase):
         import socket
         class FakePredictor:
             metadata = {"model": "test", "device": "cpu"}
-            def analyze(self, image, probe):
+            def __init__(self):
+                self.calls = []
+
+            def analyze(self, image, probe=True, threshold=0.5):
+                self.calls.append({"size": image.size, "probe": probe, "threshold": threshold})
                 probability = np.full((image.height, image.width), .6, dtype=np.float32)
                 alt = probability if probe else None
                 worst = probability if probe else None
                 ela_arr = np.zeros((image.height, image.width, 3), dtype=np.uint8)
-                return probability, alt, worst, ela_arr, {"test": True, "regions": [], "multi_probe": None, "probe": None}
+                return probability, alt, worst, ela_arr, {
+                    "test": True,
+                    "threshold": threshold,
+                    "regions": [],
+                    "multi_probe": None,
+                    "probe": None,
+                }
+        cls.predictor = FakePredictor()
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
         cls.port = cls.server.server_port
-        cls.server.RequestHandlerClass = make_handler(FakePredictor(), cls.port)
+        cls.server.RequestHandlerClass = make_handler(cls.predictor, cls.port)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
         cls.url = f"http://127.0.0.1:{cls.port}"
@@ -171,10 +182,33 @@ class HTTPTests(unittest.TestCase):
         with urlopen(request) as response:
             body = json.load(response)
             self.assertTrue(body["report"]["test"])
+            self.assertEqual(body["report"]["threshold"], 0.5)
             self.assertIsNotNone(body["alternative"])
             self.assertIsNotNone(body["worst_case"])
             self.assertIsNotNone(body["ela"])
             self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
+        self.assertEqual(self.predictor.calls[-1]["threshold"], 0.5)
+
+    def test_requested_threshold_reaches_predictor(self):
+        request = Request(
+            self.url + "/api/analyze?threshold=0.85&probe=0",
+            data=png_bytes(Image.new("RGB", (9, 7))),
+            headers={"Origin": self.url, "X-DocTrace-Request": "1"},
+        )
+        with urlopen(request) as response:
+            body = json.load(response)
+            self.assertEqual(response.status, 200)
+            self.assertEqual(body["report"]["threshold"], 0.85)
+            self.assertIsNone(body["alternative"])
+            self.assertIsNone(body["worst_case"])
+        last_call = self.predictor.calls[-1]
+        self.assertEqual(last_call["threshold"], 0.85)
+        self.assertFalse(last_call["probe"])
+
+    def test_static_routes(self):
+        for route in ("/", "/app.js", "/analysis.js", "/style.css"):
+            with urlopen(self.url + route) as response:
+                self.assertEqual(response.status, 200)
 
     def test_rejects_foreign_origin(self):
         request = Request(self.url+"/api/analyze", data=b"test", headers={"Origin":"https://example.com", "X-DocTrace-Request":"1"})

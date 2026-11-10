@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         # Compatibility testing across active supported Python releases.
-        # Note: Historical training was conducted in a recorded Python 3.10 CUDA environment.
+        # Note: The recorded project development environment is Python 3.13.14 (see README.md).
         python-version: ["3.11", "3.12", "3.13"]
 
     env:
@@ -43,6 +43,7 @@ jobs:
 
       - name: Verify JavaScript syntax
         run: |
+          node --check web/analysis.js
           node --check web/app.js
 
       - name: Run frontend regression tests

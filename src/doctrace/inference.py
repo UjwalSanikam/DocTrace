@@ -121,23 +121,22 @@ class Predictor:
         # --- Multi-condition sensitivity probe ---
         probe_results = {}
         worst_case = None
-        probe_maps = {}
+        alt_jpeg70 = None
         if probe:
-            for condition in PROBE_CONDITIONS:
-                probe_maps[condition] = self.predict(degrade(image, condition))
+            clean_active = probability >= thresh
+            worst_case = np.zeros_like(probability)
+            multi_flip_mask = np.zeros(probability.shape, dtype=bool)
 
-            # Per-condition metrics:
-            # - mean_absolute_change: mean(|p_clean - p_cond|)
-            # - threshold_flip_fraction: mean((p_clean >= thresh) != (p_cond >= thresh))
-            # - large_response_change_fraction: mean(|p_clean - p_cond| >= 0.10)
-            flip_masks = []
-            abs_change_maps = []
-            for condition, alt_map in probe_maps.items():
+            # Online accumulation avoids allocating/stacking full-image arrays for all conditions.
+            for condition in PROBE_CONDITIONS:
+                alt_map = self.predict(degrade(image, condition))
+                if condition == "jpeg70":
+                    alt_jpeg70 = alt_map
+
                 abs_change = np.abs(probability - alt_map)
-                abs_change_maps.append(abs_change)
-                flip_mask = (probability >= thresh) != (alt_map >= thresh)
-                flip_masks.append(flip_mask)
+                flip_mask = clean_active != (alt_map >= thresh)
                 large_change_mask = abs_change >= RESPONSE_CHANGE_CUTOFF
+
                 probe_results[condition] = {
                     "condition": condition,
                     "threshold": thresh,
@@ -147,11 +146,13 @@ class Predictor:
                     "large_response_change_fraction": float(large_change_mask.mean()),
                 }
 
-            # Multi-condition aggregate metrics:
-            worst_case = np.max(np.stack(abs_change_maps), axis=0)
-            multi_flip_mask = np.any(np.stack(flip_masks), axis=0)
-            multi_large_change_mask = worst_case >= RESPONSE_CHANGE_CUTOFF
+                np.maximum(worst_case, abs_change, out=worst_case)
+                np.bitwise_or(multi_flip_mask, flip_mask, out=multi_flip_mask)
+                del abs_change, flip_mask, large_change_mask
+                if condition != "jpeg70":
+                    del alt_map
 
+            multi_large_change_mask = worst_case >= RESPONSE_CHANGE_CUTOFF
             worst_case_mean_change = float(worst_case.mean())
             worst_case_flip_fraction = float(multi_flip_mask.mean())
             worst_case_large_response_fraction = float(multi_large_change_mask.mean())
@@ -161,9 +162,6 @@ class Predictor:
 
         # --- Region analysis at the explicit analysis threshold ---
         regions: RegionList = summarize_regions(probability, threshold=thresh, max_regions=10)
-
-        # Backward-compatible single-probe field (jpeg70).
-        alt_jpeg70 = probe_maps.get("jpeg70") if probe else None
 
         report = {
             "schema_version": 3,

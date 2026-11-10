@@ -35,7 +35,11 @@ Three forensics-oriented additions run at inference time without retraining:
 The browser provides downloads for both worst-case and JPEG-70 sensitivity maps. The CLI exports `sensitivity_worst_case.png` alongside `sensitivity.png`.
 
 ### 3 · Suspicious-region summary
-`src/doctrace/regions.py` (`summarize_regions`): labels 4-connected components and aggregates pixel statistics in a single vectorized pass ($O(N)$ with respect to image pixels, avoiding $O(N \cdot K)$ full-image rescans). Components are deterministically sorted by area (descending) with tie-breaking on mean model response (descending), followed by inclusive bounding box coordinates `[y_min, x_min, y_max, x_max]`. The top $K$ regions (default 10) are returned, and `total_regions_count`, `returned_regions_count`, and `regions_truncated` are reported. In the web interface, clicking any region in the sidebar highlights its bounding box on the image canvas.
+`src/doctrace/regions.py` (`summarize_regions`): labels 4-connected components and aggregates pixel statistics in a single vectorized pass. While per-component full-image rescans ($O(N \cdot K)$) are eliminated through single-pass `np.bincount` aggregation, the two-pass component labeling and deterministic sorting remain in Python. Empirical timings scale with component density:
+- **Sparse 512×512** (density 0.87%, 2 components): **~4.7 ms**
+- **Dense fragmented 512×512** (density 45.0%, ~17,450 micro-components): **~112 ms**
+- **Multi-megapixel full-page scan (2048×1536, ~3.14 MP)** (density 4.86%, 480 components): **~106 ms**
+Components are deterministically sorted by area (descending) with tie-breaking on mean model response (descending), followed by inclusive bounding box coordinates `[y_min, x_min, y_max, x_max]`. The top $K$ regions (default 10) are returned, and `total_regions_count`, `returned_regions_count`, and `regions_truncated` are reported. In the web interface, clicking any region in the sidebar highlights its bounding box on the image canvas.
 
 ## Run the demo
 

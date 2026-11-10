@@ -2,7 +2,7 @@
 
 Extracts 4-connected components from a continuous 2D probability map and aggregates
 area, mean model response, and bounding box coordinates in a single vectorized pass
-without O(N * K) full-image rescans.
+without O(N * K) full-image rescans. Component labeling and sorting remain in Python.
 """
 from __future__ import annotations
 

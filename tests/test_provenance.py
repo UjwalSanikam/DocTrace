@@ -45,6 +45,13 @@ class ProvenanceIntegrityTests(unittest.TestCase):
             "checkpoint_sha256": self.ckpt_hash,
             "index_manifest_sha256": self.val_indices_hash,
             "threshold": 0.5,
+            "batch_size": 4,
+            "protocol": (
+                "Frozen weights, native 512x512 images, no tuning. "
+                "JPEG uses Pillow quality and 4:2:0 subsampling; "
+                "resize is bicubic down/up to original grid; "
+                "blur radius 0.7. Masks unchanged."
+            ),
             "conditions": {
                 "clean": {"macro_dice": 0.5, "count": 3},
                 "jpeg90": {"macro_dice": 0.4, "count": 3},
@@ -134,6 +141,61 @@ class ProvenanceIntegrityTests(unittest.TestCase):
                 threshold=0.5,
             )
         self.assertIn("Candidate checkpoint missing", str(ctx.exception))
+
+    def test_evaluate_detects_missing_validation_manifest(self):
+        (self.run_dir / "validation_indices.json").unlink()
+        with self.assertRaises(ProvenanceError) as ctx:
+            evaluate(
+                self.run_dir,
+                "ckpt.pt",
+                self.output_dir,
+                suite="validation",
+                conditions=["clean", "jpeg90"],
+                threshold=0.5,
+            )
+        self.assertIn("Required validation manifest missing", str(ctx.exception))
+
+    def test_evaluate_detects_altered_protocol_parameters(self):
+        self.valid_summary["protocol"] = "Altered JPEG quality 85, 4:4:4 subsampling"
+        (self.output_dir / "summary.json").write_text(json.dumps(self.valid_summary), encoding="utf-8")
+        with self.assertRaises(ProvenanceError) as ctx:
+            evaluate(
+                self.run_dir,
+                "ckpt.pt",
+                self.output_dir,
+                suite="validation",
+                conditions=["clean", "jpeg90"],
+                threshold=0.5,
+            )
+        self.assertIn("Protocol/transformation parameter mismatch", str(ctx.exception))
+
+    def test_evaluate_detects_altered_batch_size(self):
+        self.valid_summary["batch_size"] = 16
+        (self.output_dir / "summary.json").write_text(json.dumps(self.valid_summary), encoding="utf-8")
+        with self.assertRaises(ProvenanceError) as ctx:
+            evaluate(
+                self.run_dir,
+                "ckpt.pt",
+                self.output_dir,
+                suite="validation",
+                conditions=["clean", "jpeg90"],
+                threshold=0.5,
+            )
+        self.assertIn("Batch size mismatch", str(ctx.exception))
+
+    def test_evaluate_detects_suite_mismatch(self):
+        self.valid_summary["suite"] = "fcd"
+        (self.output_dir / "summary.json").write_text(json.dumps(self.valid_summary), encoding="utf-8")
+        with self.assertRaises(ProvenanceError) as ctx:
+            evaluate(
+                self.run_dir,
+                "ckpt.pt",
+                self.output_dir,
+                suite="validation",
+                conditions=["clean", "jpeg90"],
+                threshold=0.5,
+            )
+        self.assertIn("Suite mismatch", str(ctx.exception))
 
     def test_export_checkpoint_validates_required_keys(self):
         bad_ckpt = self.temp_dir / "bad.pt"
