@@ -13,12 +13,12 @@ DocTrace is a local computer-vision research prototype that highlights possible 
 ## What it does
 
 - **Localize:** ResNet-18 encoder with a U-Net decoder predicts a per-pixel response at native resolution.
-- **Inspect full images:** overlapping 512 × 512 tiles with weighted blending preserve small text instead of shrinking every page to one square. This full-page mode is a deployment extension, not the benchmark protocol.
-- **Probe sensitivity:** multi-condition probe (jpeg90/70/50 + blur) produces a worst-case sensitivity map; visualize per-condition changes and aggregate instability. These are sensitivity measures, not confidence scores.
-- **Error Level Analysis:** ELA re-saves the image at a fixed quality and shows the amplified JPEG residual as a view tab — a classical forensics complement to the neural prediction.
-- **Region summary:** connected-component analysis ranks suspicious areas by size, reporting bounding box, area fraction, and mean confidence for each.
-- **Explore:** overlay, response-map, sensitivity, worst-case, ELA, and original views; adjustable threshold and opacity.
-- **Export:** overlay PNG, binary mask PNG, ELA PNG, worst-case sensitivity PNG, and a JSON report with per-region details. The CLI additionally exports full-precision probability arrays.
+- **Inspect full images:** overlapping 512 × 512 tiles with raised-cosine weighted blending preserve small text instead of shrinking every page to one square. This full-page mode is a deployment extension, not the benchmark protocol.
+- **Probe sensitivity:** multi-condition probe (jpeg90, jpeg70, jpeg50, blur07) evaluates per-condition and worst-case sensitivity. Distinguishes genuine threshold flips from large absolute response changes (cutoff 0.10). These are empirical stability measures, not calibrated certainty scores.
+- **Error Level Analysis:** ELA re-saves the image at JPEG quality 90 (4:2:0 subsampling) and computes the amplified absolute difference (×15, clipped to [0, 255]) — a classical forensic inspection tool. Unedited text naturally produces high residuals; ELA does not prove tampering.
+- **Region summary:** single-pass connected-component aggregation ranks suspicious areas by pixel area, reporting bounding box [y_min, x_min, y_max, x_max], area fraction, and mean model response. Bounding boxes are interactive in the web interface.
+- **Explore:** overlay, response-map, sensitivity, worst-case, ELA, and original views; adjustable threshold and opacity sliders.
+- **Export:** overlay PNG, binary mask PNG, raw ELA residual PNG, colorized rendered ELA PNG, worst-case sensitivity PNG, JPEG-70 sensitivity PNG, and a schema v3 JSON report clearly separating immutable server analysis (at 0.50) from interactive client inspection. The CLI additionally exports full-precision probability arrays (`probabilities.npy`).
 - **Keep processing local:** no external inference service, browser uploads to third parties, or server-side image persistence. The server binds to loopback only.
 
 ## Research additions
@@ -26,13 +26,16 @@ DocTrace is a local computer-vision research prototype that highlights possible 
 Three forensics-oriented additions run at inference time without retraining:
 
 ### 1 · Error Level Analysis (ELA)
-src/doctrace/degradations.py (ela): re-saves the input as JPEG at a fixed quality (default 90) and returns the amplified per-pixel absolute residual. Regions inserted from a different compression history tend to show a distinct pattern. The result is shown as a dedicated **ELA** tab in the browser and written to ela.png by the CLI.
+`src/doctrace/degradations.py` (`ela`): re-saves the input as JPEG at fixed quality 90 with standard 4:2:0 chroma subsampling and returns the amplified per-pixel absolute residual (amplification ×15, clipped to [0, 255]). ELA is an inspection heuristic: ordinary unedited high-contrast text naturally produces high residuals, and compression artifacts vary with resolution, crop, and file formats (PNG/WebP). The web interface allows downloading both the raw amplified residual (`ela-residual.png`) and the colorized inspection view (`ela-rendered.png`). The CLI exports `ela_residual.png` (and `ela.png`).
 
 ### 2 · Multi-condition sensitivity probe
-src/doctrace/inference.py (PROBE_CONDITIONS): the single JPEG-70 probe is extended to four conditions: **jpeg90, jpeg70, jpeg50, and blur07**. A **worst-case map** = max per-pixel absolute change across all four. The browser shows it as a **Worst-case** tab; the stats panel reports pixels that shift >= 10% under any probe. The JSON report includes per-condition mean change and flip fractions. The CLI writes sensitivity_worst_case.png alongside sensitivity.png.
+`src/doctrace/inference.py` (`PROBE_CONDITIONS`): the sensitivity analysis tests four conditions: **jpeg90, jpeg70, jpeg50, and blur07**. A composite **worst-case map** measures the maximum per-pixel absolute change across all four conditions. DocTrace rigorously separates two distinct stability metrics:
+- **`worst_case_threshold_flip_fraction`**: fraction of pixels whose thresholded binary decision flips under any probe condition.
+- **`worst_case_large_response_change_fraction`**: fraction of pixels whose absolute response shift reaches or exceeds 0.10 (an absolute change of 0.10 on the [0, 1] scale, not a relative percentage).
+The browser provides downloads for both worst-case and JPEG-70 sensitivity maps. The CLI exports `sensitivity_worst_case.png` alongside `sensitivity.png`.
 
 ### 3 · Suspicious-region summary
-src/doctrace/regions.py (summarize_regions): labels connected components (4-connectivity, pure NumPy — no scipy) above the threshold and ranks them by area. Each entry: rank, area in pixels and as a fraction of the image, mean model confidence, and bounding box. The browser surfaces the top regions in a sidebar card; the JSON report includes the full list.
+`src/doctrace/regions.py` (`summarize_regions`): labels 4-connected components and aggregates pixel statistics in a single vectorized pass ($O(N)$ with respect to image pixels, avoiding $O(N \cdot K)$ full-image rescans). Components are deterministically sorted by area (descending) with tie-breaking on mean model response (descending), followed by inclusive bounding box coordinates `[y_min, x_min, y_max, x_max]`. The top $K$ regions (default 10) are returned, and `total_regions_count`, `returned_regions_count`, and `regions_truncated` are reported. In the web interface, clicking any region in the sidebar highlights its bounding box on the image canvas.
 
 ## Run the demo
 
@@ -61,7 +64,7 @@ The app's display and interactive exports use 8-bit probability maps; rounding e
 python scripts/predict.py path_to_image.png --output outputs/my_document
 ```
 
-This writes `overlay.png`, `mask.png`, `probabilities.npy`, `sensitivity.png`, and `report.json`. Use `--no-probe` for one inference pass or `--device cpu` to run without CUDA. Output directories must be new or empty; existing results are protected.
+This writes `overlay.png`, `mask.png`, `ela_residual.png` (and `ela.png`), `sensitivity_worst_case.png` (and `sensitivity.png`), `probabilities.npy`, and `report.json`. Use `--threshold` to specify an analysis threshold (default 0.50), `--no-probe` for a single-pass inference without sensitivity probes, or `--device cpu` to run without CUDA. Output directories must be new or empty; existing results are protected.
 
 ## Evaluation and findings
 

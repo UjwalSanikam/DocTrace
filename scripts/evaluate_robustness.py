@@ -46,17 +46,30 @@ def main():
     parser.add_argument("--database", default="data/raw/DocTamperV1-FCD")
     parser.add_argument("--conditions", nargs="+", choices=CONDITIONS, default=list(CONDITIONS))
     parser.add_argument("--output", required=True)
+    parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--workers", type=int, default=2)
     args = parser.parse_args()
+
     output, run = Path(args.output), Path(args.run)
     if output.exists() and any(output.iterdir()):
         parser.error("Output is not empty; choose a new directory")
     if args.workers < 0:
         parser.error("workers must be nonnegative")
-    checkpoint = torch.load(run / args.checkpoint, map_location="cpu", weights_only=True)
+    if not (0.0 < args.threshold < 1.0):
+        parser.error(f"threshold must be in (0, 1), got {args.threshold}")
+
+    checkpoint_file = run / args.checkpoint
+    if not checkpoint_file.is_file():
+        parser.error(f"Checkpoint file does not exist: {checkpoint_file}")
+
+    checkpoint = torch.load(checkpoint_file, map_location="cpu", weights_only=True)
     config = checkpoint["config"]
+
     if args.suite == "validation":
-        indices = json.loads((run / "validation_indices.json").read_text())
+        indices_file = run / "validation_indices.json"
+        if not indices_file.is_file():
+            parser.error(f"Validation indices file missing: {indices_file}")
+        indices = json.loads(indices_file.read_text(encoding="utf-8"))
         database = config["database"]
     elif args.suite == "fcd":
         database = args.database
@@ -64,11 +77,13 @@ def main():
     else:
         database = None
         indices = list(range(1000, 1064))
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_model(config.get("model", "small")).to(device)
     model.load_state_dict(checkpoint["model"], strict=True)
     model.eval()
     output.mkdir(parents=True, exist_ok=True)
+
     summaries = {}
     for condition in dict.fromkeys(args.conditions):
         dataset = PerturbedDataset(database, indices, condition, args.suite == "synthetic")
@@ -79,38 +94,50 @@ def main():
                 probabilities = model(batch["image"].to(device)).sigmoid()
                 if not torch.isfinite(probabilities).all():
                     raise RuntimeError("Nonfinite predictions")
-                rows.extend(metric_rows(probabilities, batch["mask"].to(device), batch["index"]))
-                fractions.extend((probabilities >= 0.5).float().mean((1, 2, 3)).cpu().tolist())
+                rows.extend(metric_rows(probabilities, batch["mask"].to(device), batch["index"], threshold=args.threshold))
+                fractions.extend((probabilities >= args.threshold).float().mean((1, 2, 3)).cpu().tolist())
                 if (step + 1) % 100 == 0:
                     print(f"{args.suite} / {condition}: {len(rows)}/{len(indices)}", flush=True)
         if dataset.base is not None:
             dataset.base.close()
         write_rows(output / f"{condition}_per_image.csv", rows)
         if args.suite == "synthetic":
-            metrics = {"count": len(rows), "mean_false_positive_pixel_fraction": float(np.mean(fractions)),
-                       "median_false_positive_pixel_fraction": float(np.median(fractions)),
-                       "p95_false_positive_pixel_fraction": float(np.percentile(fractions, 95)),
-                       "documents_with_any_predicted_pixel": sum(f > 0 for f in fractions),
-                       "documents_with_at_least_0.1_percent_predicted_area": sum(f >= .001 for f in fractions)}
+            metrics = {
+                "count": len(rows),
+                "mean_false_positive_pixel_fraction": float(np.mean(fractions)),
+                "median_false_positive_pixel_fraction": float(np.median(fractions)),
+                "p95_false_positive_pixel_fraction": float(np.percentile(fractions, 95)),
+                "documents_with_any_predicted_pixel": sum(f > 0 for f in fractions),
+                "documents_with_at_least_0.1_percent_predicted_area": sum(f >= .001 for f in fractions),
+            }
         else:
             metrics = summarize(rows, None)
-            metrics.pop("loss")
+            metrics.pop("loss", None)
             metrics.update(count=len(rows), zero_overlap_images=sum(r["tp"] == 0 for r in rows))
         summaries[condition] = metrics
         print(f"{condition}: {json.dumps(metrics)}", flush=True)
         del loader, dataset
+
     if "clean" in summaries and args.suite != "synthetic":
         for metrics in summaries.values():
             metrics["dice_change_from_clean"] = metrics["macro_dice"] - summaries["clean"]["macro_dice"]
-    report = {"suite": args.suite, "checkpoint_epoch": checkpoint["epoch"],
-              "checkpoint_sha256": sha256((run / args.checkpoint).read_bytes()).hexdigest(),
-              "index_manifest_sha256": sha256(json.dumps(indices).encode()).hexdigest(),
-              "threshold": .5, "batch_size": config["batch_size"], "conditions": summaries,
-              "protocol": "Frozen weights, native 512x512 images, no tuning. JPEG uses Pillow quality and 4:2:0 subsampling; resize is bicubic down/up to original grid; blur radius 0.7. Masks unchanged.",
-              "limitations": config["split_limitation"],
-              "suite_note": {"validation": "Development robustness study on the same provisional validation set used for checkpoint selection.",
-                             "fcd": "Separate FCD evaluation after freezing checkpoint and threshold. Some samples were inspected during loader development; not a pristine blind test. No claim of source separation from training.",
-                             "synthetic": "64 procedural, unedited documents. Pixel false positives only; not representative of real authentic documents. No document-authenticity accuracy is claimed."}[args.suite]}
+
+    report = {
+        "suite": args.suite,
+        "checkpoint_epoch": checkpoint["epoch"],
+        "checkpoint_sha256": sha256(checkpoint_file.read_bytes()).hexdigest(),
+        "index_manifest_sha256": sha256(json.dumps(indices).encode()).hexdigest(),
+        "threshold": float(args.threshold),
+        "batch_size": config["batch_size"],
+        "conditions": summaries,
+        "protocol": "Frozen weights, native 512x512 images, no tuning. JPEG uses Pillow quality and 4:2:0 subsampling; resize is bicubic down/up to original grid; blur radius 0.7. Masks unchanged.",
+        "limitations": config["split_limitation"],
+        "suite_note": {
+            "validation": "Development robustness study on the same provisional validation set used for checkpoint selection.",
+            "fcd": "Separate FCD evaluation after freezing checkpoint and threshold. Some samples were inspected during loader development; not a pristine blind test. No claim of source separation from training.",
+            "synthetic": "64 procedural, unedited documents. Pixel false positives only; not representative of real authentic documents. No document-authenticity accuracy is claimed.",
+        }[args.suite],
+    }
     (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"Saved {output / 'summary.json'}", flush=True)
 

@@ -24,19 +24,24 @@ def main():
     if args.image.stat().st_size > MAX_BYTES:
         parser.error("Input exceeds 24 MB")
     image = decode_image(args.image.read_bytes())
-    probability, alternative, worst_case, ela_map, report = Predictor(args.checkpoint, args.device).analyze(image, not args.no_probe, args.threshold)
+    probability, alternative, worst_case, ela_map, report = Predictor(args.checkpoint, args.device).analyze(
+        image, not args.no_probe, args.threshold
+    )
     args.output.mkdir(parents=True, exist_ok=True)
     np.save(args.output / "probabilities.npy", probability, allow_pickle=False)
     (args.output / "mask.png").write_bytes(png_bytes((probability >= args.threshold).astype(np.uint8) * 255))
     (args.output / "overlay.png").write_bytes(png_bytes(overlay(image, probability, args.threshold)))
-    # ELA: classical forensics residual for comparison with neural prediction.
-    (args.output / "ela.png").write_bytes(png_bytes(ela_map))
+    # ELA: amplified JPEG residual (quality 90, amplify 15, clipped to [0, 255]).
+    (args.output / "ela_residual.png").write_bytes(png_bytes(ela_map))
+    (args.output / "ela.png").write_bytes(png_bytes(ela_map))  # backward compatibility alias
     if alternative is not None:
-        # Backward-compatible single-probe sensitivity (jpeg70 absolute change).
-        (args.output / "sensitivity.png").write_bytes(png_bytes((np.abs(probability - alternative) * 255).round().astype(np.uint8)))
+        (args.output / "sensitivity.png").write_bytes(
+            png_bytes((np.abs(probability - alternative) * 255).round().astype(np.uint8))
+        )
     if worst_case is not None:
-        # Multi-probe worst-case: max absolute change across jpeg90/70/50 and blur.
-        (args.output / "sensitivity_worst_case.png").write_bytes(png_bytes((worst_case * 255).round().astype(np.uint8)))
+        (args.output / "sensitivity_worst_case.png").write_bytes(
+            png_bytes((worst_case * 255).round().astype(np.uint8))
+        )
     (args.output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
 

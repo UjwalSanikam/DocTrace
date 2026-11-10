@@ -1,4 +1,4 @@
-"""Deterministic image perturbations that preserve the annotation grid."""
+"""Deterministic image perturbations and forensic inspection residuals."""
 from io import BytesIO
 
 import numpy as np
@@ -30,15 +30,17 @@ def degrade(image, condition):
 
 
 def ela(image, quality=90, amplify=15):
-    """Error Level Analysis: re-save at fixed JPEG quality, return amplified abs residual.
+    """Error Level Analysis: re-save at fixed JPEG quality, return amplified absolute residual.
 
-    Returns a uint8 RGB array the same size as *image*. Regions with a different
-    compression history (e.g., inserted from another source) tend to show higher
-    residuals than authentic, multiply-compressed surroundings.
+    Returns a uint8 RGB array the same size as *image*. Computes:
+        np.clip(np.abs(image - jpeg_recompressed(image, quality)) * amplify, 0, 255)
 
-    *amplify* scales the absolute difference for display; pure pixel values are
-    divided by amplify before clamping so that a residual of 255/amplify maps to
-    full white. Default value of 15 gives visible contrast for typical documents.
+    Interpretation limits:
+    - ELA is an inspection heuristic visualizing recompression residuals, not an authenticity verdict.
+    - Ordinary, unedited high-contrast text, lines, and sharp edges naturally produce strong residuals.
+    - It does not establish tampering, splicing, or compression-history differences on its own.
+    - Non-JPEG inputs (PNG, WebP) or previously resized/recompressed documents do not possess a pristine JPEG history.
+    - *amplify* (default 15) scales residuals for visual contrast and clips values to [0, 255].
     """
     image = image.convert("RGB")
     buffer = BytesIO()

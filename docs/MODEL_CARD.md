@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Research and education: localize possible text edits in document images and study sensitivity to JPEG recompression. This system produces a spatial model response, not an authenticity verdict, fraud probability, or evidentiary conclusion.
+Research and education: localize possible text edits in document images and study sensitivity to JPEG recompression and perturbations. This system produces a spatial model response, not an authenticity verdict, fraud probability, or evidentiary conclusion.
 
 ## Model and training
 
@@ -22,9 +22,25 @@ All measured results and hashes are in [release evaluation](../experiments/relea
 
 Single PNG/JPEG/WebP images only; PDFs and animations are excluded. EXIF orientation is applied and transparent pixels are composited on white. Larger images use 512-pixel tiles at stride 384 with raised-cosine overlap weighting. Small images use edge padding; predictions are cropped back to the original size. No page-wide resizing is performed. Full-page tiling can produce context and boundary effects not measured by the fixed-patch benchmark.
 
-The optional sensitivity probe recompresses the entire input image at JPEG quality 70 and repeats inference. Its maps display absolute probability changes; the summary reports how many pixels cross the selected threshold. Instability can occur in both correct and incorrect predictions, so it is not a calibrated uncertainty estimator.
+### Multi-Condition Sensitivity Probes
+The optional sensitivity probe tests four distinct image perturbations: **JPEG 90**, **JPEG 70**, **JPEG 50**, and **Gaussian blur ($\sigma=0.7$)**. It generates per-condition response change maps and a composite **worst-case sensitivity map** ($\max_{\text{condition}} |p_{\text{clean}} - p_{\text{cond}}|$). Two distinct metrics are evaluated:
+1. **Genuine Threshold-Flip Fraction (`worst_case_threshold_flip_fraction`)**: The proportion of pixels whose binarized decision flips under at least one probe condition at the declared threshold:
+   $$\text{mean}\left(\bigvee_{c \in \text{conditions}} (p_{\text{clean}} \ge \tau) \ne (p_c \ge \tau)\right)$$
+2. **Large-Response-Change Fraction (`worst_case_large_response_change_fraction`)**: The proportion of pixels where the absolute response shift reaches or exceeds an absolute cutoff of 0.10:
+   $$\text{mean}\left(\max_{c \in \text{conditions}} |p_{\text{clean}} - p_c| \ge 0.10\right)$$
+Note: 0.10 denotes an absolute response shift of 0.10 on the $[0, 1]$ probability scale, not a relative 10% change. These are empirical sensitivity measures, not calibrated Bayesian uncertainties or likelihood ratios.
 
-The UI quantizes probabilities to 8 bits for display and interactive export (maximum rounding error 0.5/255). Benchmark evaluation and the CLI use float probabilities. The threshold slider is an inspection tool; results at user-chosen thresholds have not been validated.
+### Error Level Analysis (ELA)
+ELA is an inspection heuristic that measures the per-pixel absolute difference between the image and a re-saved version at JPEG quality 90 (chroma subsampling 4:2:0). Residuals are amplified by a factor of 15 and clipped to $[0, 255]$:
+- Ordinary unedited high-contrast text and sharp lines naturally exhibit strong recompression residuals.
+- Differences in residual intensity do not prove tampering or establish compression history.
+- The browser interface provides both the raw amplified residual (`ela-residual.png`) and an intensity-mapped colorized view (`ela-rendered.png`).
+
+### Connected-Component Region Summaries
+Active pixels above the threshold are grouped into 4-connected components using single-pass vectorized aggregation. Components are sorted deterministically by area (descending) with tie-breaking by mean model response (descending), and inclusive pixel bounding box coordinates $[y_{\min}, x_{\min}, y_{\max}, x_{\max}]$. The report records `total_regions_count`, `returned_regions_count`, and `regions_truncated`.
+
+### Display Quantization vs. Analysis Precision
+The web interface quantizes model responses to 8 bits ($1/255$ resolution) for rendering and interactive client-side threshold exploration. Full-precision 32-bit floats are preserved during server-side evaluation and in CLI exports. Exported reports clearly separate immutable `server_analysis` (evaluated at benchmark threshold 0.50) from client-side `interactive_inspection` (evaluated at the user-selected display threshold).
 
 ## Limitations and failure modes
 

@@ -77,8 +77,12 @@ def make_handler(predictor, port):
                 try:
                     self.connection.settimeout(60)
                     image = decode_image(self.rfile.read(length))
-                    probe = parse_qs(urlsplit(self.path).query).get("probe", ["1"])[0] == "1"
-                    probability, alternative, worst_case, ela_map, report = predictor.analyze(image, probe)
+                    qs = parse_qs(urlsplit(self.path).query)
+                    probe = qs.get("probe", ["1"])[0] == "1"
+                    threshold = float(qs.get("threshold", ["0.5"])[0])
+                    if not (0.0 < threshold < 1.0):
+                        threshold = 0.5
+                    probability, alternative, worst_case, ela_map, report = predictor.analyze(image, probe, threshold)
                     encoded = lambda array: base64.b64encode(png_bytes(array)).decode("ascii")
                     self.respond(200, {
                         "image": encoded(image),

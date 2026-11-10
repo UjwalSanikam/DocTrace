@@ -8,12 +8,18 @@ on:
 
 jobs:
   test:
-    name: CPU tests (Python ${{ matrix.python-version }})
+    name: CPU compatibility & regression suite (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        # Compatibility testing across active supported Python releases.
+        # Note: Historical training was conducted in a recorded Python 3.10 CUDA environment.
+        python-version: ["3.11", "3.12", "3.13"]
+
+    env:
+      CI: "true"
+      MPLCONFIGDIR: "/tmp/matplotlib"
 
     steps:
       - uses: actions/checkout@v4
@@ -24,14 +30,28 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install CPU-only dependencies
+      - name: Set up Node.js for frontend verification
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install CPU dependencies
         run: |
           python -m pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install numpy Pillow lmdb matplotlib
 
-      - name: Run test suite
-        run: python -m unittest discover -s tests -v
+      - name: Verify JavaScript syntax
+        run: |
+          node --check web/app.js
+
+      - name: Run frontend regression tests
+        run: |
+          node tests/test_frontend.js
+
+      - name: Run Python unit and integration test suite
+        run: |
+          python -m unittest discover -s tests -v
 
       - name: Check all source modules import cleanly
         run: |

@@ -157,6 +157,9 @@ class HTTPTests(unittest.TestCase):
             probe.close()
         except OSError as exc:
             cls.server.shutdown(); cls.server.server_close(); cls.thread.join()
+            import os
+            if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
+                raise AssertionError(f"Loopback TCP connect failed in CI environment: {exc}") from exc
             raise unittest.SkipTest(f"Loopback TCP connect blocked in this environment: {exc}") from exc
 
     @classmethod

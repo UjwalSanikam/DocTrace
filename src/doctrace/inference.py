@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 import time
 import warnings
+from typing import Optional
 
 import numpy as np
 from PIL import Image, ImageOps
@@ -11,12 +12,13 @@ import torch
 
 from .degradations import degrade, ela, to_tensor, PROBE_CONDITIONS
 from .model import build_model
-from .regions import summarize_regions
+from .regions import summarize_regions, RegionList
 
 TILE = 512
 STRIDE = 384
 MAX_PIXELS = 8_000_000
 MAX_BYTES = 24 * 1024 * 1024
+RESPONSE_CHANGE_CUTOFF = 0.10
 
 
 def decode_image(data):
@@ -69,14 +71,21 @@ def overlay(image, probability, threshold=.5):
 class Predictor:
     def __init__(self, checkpoint, device="auto"):
         path = Path(checkpoint)
-        self.device = torch.device("cuda" if device == "auto" and torch.cuda.is_available() else "cpu" if device == "auto" else device)
+        self.device = torch.device(
+            "cuda" if device == "auto" and torch.cuda.is_available() else "cpu" if device == "auto" else device
+        )
         state = torch.load(path, map_location="cpu", weights_only=True)
         self.model = build_model(state["config"].get("model", "small"))
         self.model.load_state_dict(state["model"], strict=True)
         self.model.to(self.device).eval()
-        self.metadata = {"model": state["config"].get("architecture", "SmallUNet"),
-                         "epoch": state["epoch"], "checkpoint_sha256": sha256(path.read_bytes()).hexdigest(),
-                         "device": self.device.type, "tile_size": TILE, "stride": STRIDE}
+        self.metadata = {
+            "model": state["config"].get("architecture", "SmallUNet"),
+            "epoch": state["epoch"],
+            "checkpoint_sha256": sha256(path.read_bytes()).hexdigest(),
+            "device": self.device.type,
+            "tile_size": TILE,
+            "stride": STRIDE,
+        }
 
     @torch.inference_mode()
     def predict(self, image):
@@ -84,7 +93,7 @@ class Predictor:
         if width * height > MAX_PIXELS or max(image.size) > 8192 or tile_count(image.size) > 64:
             raise ValueError("Image exceeds the local demo's size limit. Use a smaller image or a crop.")
         rgb = np.array(image.convert("RGB"))
-        padded = np.pad(rgb, ((0, max(0, TILE-height)), (0, max(0, TILE-width)), (0, 0)), mode="edge")
+        padded = np.pad(rgb, ((0, max(0, TILE - height)), (0, max(0, TILE - width)), (0, 0)), mode="edge")
         total = np.zeros(padded.shape[:2], dtype=np.float32)
         weights = np.zeros_like(total)
         # Raised-cosine weighting reduces tile seams; the floor keeps page edges covered.
@@ -92,19 +101,20 @@ class Predictor:
         window = axis[:, None] * axis[None, :]
         positions = [(y, x) for y in starts(height) for x in starts(width)]
         for offset in range(0, len(positions), 4):
-            batch_positions = positions[offset:offset+4]
-            batch = torch.stack([to_tensor(Image.fromarray(padded[y:y+TILE, x:x+TILE])) for y, x in batch_positions])
+            batch_positions = positions[offset:offset + 4]
+            batch = torch.stack([to_tensor(Image.fromarray(padded[y:y + TILE, x:x + TILE])) for y, x in batch_positions])
             probabilities = self.model(batch.to(self.device)).sigmoid()[:, 0].cpu().numpy()
             if not np.isfinite(probabilities).all():
                 raise RuntimeError("The model produced nonfinite values.")
             for (y, x), probability in zip(batch_positions, probabilities):
-                total[y:y+TILE, x:x+TILE] += probability * window
-                weights[y:y+TILE, x:x+TILE] += window
+                total[y:y + TILE, x:x + TILE] += probability * window
+                weights[y:y + TILE, x:x + TILE] += window
         return (total / weights)[:height, :width]
 
     def analyze(self, image, probe=True, threshold=.5):
-        if not 0 < threshold < 1:
-            raise ValueError("Threshold must be between 0 and 1.")
+        thresh = float(threshold)
+        if not 0.0 < thresh < 1.0:
+            raise ValueError(f"Threshold must be in (0, 1), got {threshold}")
         started = time.perf_counter()
         probability = self.predict(image)
 
@@ -115,48 +125,114 @@ class Predictor:
         if probe:
             for condition in PROBE_CONDITIONS:
                 probe_maps[condition] = self.predict(degrade(image, condition))
-            # Per-condition absolute change and threshold flips vs clean prediction.
+
+            # Per-condition metrics:
+            # - mean_absolute_change: mean(|p_clean - p_cond|)
+            # - threshold_flip_fraction: mean((p_clean >= thresh) != (p_cond >= thresh))
+            # - large_response_change_fraction: mean(|p_clean - p_cond| >= 0.10)
+            flip_masks = []
+            abs_change_maps = []
             for condition, alt_map in probe_maps.items():
                 abs_change = np.abs(probability - alt_map)
+                abs_change_maps.append(abs_change)
+                flip_mask = (probability >= thresh) != (alt_map >= thresh)
+                flip_masks.append(flip_mask)
+                large_change_mask = abs_change >= RESPONSE_CHANGE_CUTOFF
                 probe_results[condition] = {
+                    "condition": condition,
+                    "threshold": thresh,
                     "mean_absolute_change": float(abs_change.mean()),
-                    "threshold_flip_fraction": float(((probability >= threshold) != (alt_map >= threshold)).mean()),
+                    "threshold_flip_fraction": float(flip_mask.mean()),
+                    "response_change_cutoff": RESPONSE_CHANGE_CUTOFF,
+                    "large_response_change_fraction": float(large_change_mask.mean()),
                 }
-            # Worst-case map: maximum absolute change across all probe conditions.
-            worst_case = np.max(np.stack([np.abs(probability - pm) for pm in probe_maps.values()]), axis=0)
+
+            # Multi-condition aggregate metrics:
+            worst_case = np.max(np.stack(abs_change_maps), axis=0)
+            multi_flip_mask = np.any(np.stack(flip_masks), axis=0)
+            multi_large_change_mask = worst_case >= RESPONSE_CHANGE_CUTOFF
+
+            worst_case_mean_change = float(worst_case.mean())
+            worst_case_flip_fraction = float(multi_flip_mask.mean())
+            worst_case_large_response_fraction = float(multi_large_change_mask.mean())
 
         # --- Error Level Analysis ---
-        ela_map = ela(image)
+        ela_map = ela(image, quality=90, amplify=15)
 
-        # --- Region analysis ---
-        regions = summarize_regions(probability, threshold)
+        # --- Region analysis at the explicit analysis threshold ---
+        regions: RegionList = summarize_regions(probability, threshold=thresh, max_regions=10)
 
         # Backward-compatible single-probe field (jpeg70).
         alt_jpeg70 = probe_maps.get("jpeg70") if probe else None
 
         report = {
-            "schema_version": 2, **self.metadata,
-            "width": image.width, "height": image.height,
-            "tiles": tile_count(image.size), "threshold": threshold,
-            "flagged_pixel_fraction": float((probability >= threshold).mean()),
+            "schema_version": 3,
+            **self.metadata,
+            "width": image.width,
+            "height": image.height,
+            "tiles": tile_count(image.size),
+            "threshold": thresh,
+            "flagged_pixel_fraction": float((probability >= thresh).mean()),
             "elapsed_seconds": round(time.perf_counter() - started, 3),
+            "regions": list(regions),
+            "total_regions_count": regions.total_count,
+            "returned_regions_count": regions.returned_count,
+            "regions_truncated": regions.truncated,
+            "ela": {
+                "quality": 90,
+                "subsampling": "4:2:0",
+                "amplification": 15,
+                "clipping": [0, 255],
+                "description": "Amplified absolute difference between input and a JPEG recompression at quality 90.",
+                "interpretation": (
+                    "Error Level Analysis is an inspection heuristic visualizing recompression residuals. "
+                    "Ordinary unedited high-contrast text naturally produces strong residuals; "
+                    "residual differences do not prove tampering or establish authenticity."
+                ),
+            },
             "probe": None,
             "multi_probe": None,
-            "regions": regions,
-            "interpretation": "Localization research prototype. Flagged pixels are model responses, not proof of alteration. No image-level authenticity verdict or calibrated confidence.",
-            "limitations": "Real authentic-document false alarms and physical recapture are unvalidated. Tiled full-page inference is not the 512x512 benchmark protocol.",
+            "interpretation": (
+                "Localization research prototype. Flagged pixels are raw model responses, "
+                "not proof of alteration. No image-level authenticity verdict or calibrated fraud probability."
+            ),
+            "limitations": (
+                "Real authentic-document false alarms and physical recapture are unvalidated. "
+                "Tiled full-page inference is an engineering inspection tool, not the fixed-patch benchmark protocol."
+            ),
         }
-        if probe:
+
+        if probe and alt_jpeg70 is not None:
             report["probe"] = {
                 "condition": "jpeg70",
+                "threshold": thresh,
                 "mean_absolute_probability_change": float(np.abs(probability - alt_jpeg70).mean()),
                 "threshold_flip_fraction": probe_results["jpeg70"]["threshold_flip_fraction"],
-                "interpretation": "Response change after JPEG recompression; not calibrated uncertainty or evidence of tampering.",
+                "response_change_cutoff": RESPONSE_CHANGE_CUTOFF,
+                "large_response_change_fraction": probe_results["jpeg70"]["large_response_change_fraction"],
+                "interpretation": (
+                    f"Response change after JPEG quality 70 recompression at threshold {thresh:.2f}; "
+                    "sensitivity measure, not calibrated uncertainty or evidence of tampering."
+                ),
             }
             report["multi_probe"] = {
+                "threshold": thresh,
+                "response_change_cutoff": RESPONSE_CHANGE_CUTOFF,
+                "conditions_tested": list(PROBE_CONDITIONS),
                 "conditions": probe_results,
-                "worst_case_mean_change": float(worst_case.mean()),
-                "worst_case_flip_fraction": float((worst_case >= 0.1).mean()),
-                "interpretation": "Per-condition and aggregate sensitivity to jpeg90/70/50 and Gaussian blur. High values indicate unstable predictions, not confirmed tampering.",
+                "worst_case_mean_change": worst_case_mean_change,
+                "worst_case_threshold_flip_fraction": worst_case_flip_fraction,
+                "worst_case_large_response_change_fraction": worst_case_large_response_fraction,
+                # Backward compatibility alias
+                "worst_case_flip_fraction": worst_case_flip_fraction,
+                "large_response_change_fraction": worst_case_large_response_fraction,
+                "interpretation": (
+                    f"Sensitivity evaluated across {', '.join(PROBE_CONDITIONS)}. "
+                    f"worst_case_threshold_flip_fraction is the fraction of pixels whose thresholded binary decision "
+                    f"(at {thresh:.2f}) flips under any condition. "
+                    f"worst_case_large_response_change_fraction is the fraction of pixels whose absolute response shift "
+                    f"reaches or exceeds {RESPONSE_CHANGE_CUTOFF:.2f}."
+                ),
             }
+
         return probability, alt_jpeg70, worst_case, ela_map, report

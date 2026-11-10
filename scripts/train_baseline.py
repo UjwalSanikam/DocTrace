@@ -27,8 +27,8 @@ def seed_worker(worker_id):
     np.random.seed(seed)
 
 
-def metric_rows(probabilities, masks, indices):
-    pred, truth = probabilities >= 0.5, masks.bool()
+def metric_rows(probabilities, masks, indices, threshold=0.5):
+    pred, truth = probabilities >= threshold, masks.bool()
     axes = (1, 2, 3)
     tp = (pred & truth).sum(axes).cpu().tolist()
     fp = (pred & ~truth).sum(axes).cpu().tolist()
