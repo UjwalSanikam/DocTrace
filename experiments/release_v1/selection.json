@@ -1,0 +1,38 @@
+{
+  "criterion": "Equal mean macro Dice on clean, JPEG90, JPEG70, JPEG50 development images; fixed threshold 0.5",
+  "candidates": [
+    {
+      "name": "epoch8",
+      "run": "outputs/resnet18_continue_v1",
+      "checkpoint": "best.pt",
+      "primary_mean_dice": 0.21205349985985467,
+      "checkpoint_sha256": "e11f09c234560ed04668bb41538fab82990aa4e3470cb7c257c8603baa9c460b",
+      "epoch": 8
+    },
+    {
+      "name": "clean_control",
+      "run": "outputs/clean_control_v1",
+      "checkpoint": "last.pt",
+      "primary_mean_dice": 0.21455117094849532,
+      "checkpoint_sha256": "c7c05445aebbdcb0e7841f96570f1eb70b5d0489a735d3a3042ceb0b89458152",
+      "epoch": 10
+    },
+    {
+      "name": "jpeg_augmented",
+      "run": "outputs/jpeg_adapt_v1",
+      "checkpoint": "last.pt",
+      "primary_mean_dice": 0.26577611883675584,
+      "checkpoint_sha256": "3ecdb0564afe519a78a2a091b29d5cd0254d1c464f36110dfdc87d84724f9134",
+      "epoch": 10
+    }
+  ],
+  "selected": {
+    "name": "jpeg_augmented",
+    "run": "outputs/jpeg_adapt_v1",
+    "checkpoint": "last.pt",
+    "primary_mean_dice": 0.26577611883675584,
+    "checkpoint_sha256": "3ecdb0564afe519a78a2a091b29d5cd0254d1c464f36110dfdc87d84724f9134",
+    "epoch": 10
+  },
+  "note": "Single-seed development comparison. FCD and synthetic-negative results are not used for selection."
+}

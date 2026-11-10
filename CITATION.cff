@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: "If you use DocTrace in your research, please cite it as below."
+type: software
+title: "DocTrace: Document-Image Tampering Localization with JPEG Robustness Analysis"
+version: 1.0.0
+date-released: "2026-11-10"
+license: MIT
+url: "https://github.com/UjwalSanikam/DocTrace"
+repository-code: "https://github.com/UjwalSanikam/DocTrace"
+authors:
+  - family-names: Sanikam
+    given-names: Ujwal
+keywords:
+  - document forensics
+  - image tampering detection
+  - image segmentation
+  - JPEG robustness
+  - error level analysis
+  - computer vision
+  - PyTorch
+abstract: >
+  DocTrace is a local computer-vision research prototype for per-pixel
+  document-image tampering localization. It trains a ResNet-18 U-Net on the
+  DocTamper dataset, investigates the effect of JPEG augmentation on
+  compression robustness via a controlled matched-training comparison, and
+  provides a browser-based inspection interface with Error Level Analysis,
+  multi-condition sensitivity probing (jpeg90/70/50 and blur), and
+  connected-component region summaries. No novel architecture or
+  state-of-the-art result is claimed; the contribution is a reproducible
+  robustness comparison, explicit failure analysis, and a transparent local demo.
+references:
+  - type: article
+    title: "Towards Robust Tampered Text Detection in Document Image: New Dataset and New Solution"
+    authors:
+      - family-names: Qu
+        given-names: Chenfan
+    year: 2023
+    conference:
+      name: "IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)"
+    pages: "5937-5946"
+    url: "https://openaccess.thecvf.com/content/CVPR2023/html/Qu_Towards_Robust_Tampered_Text_Detection_in_Document_Image_New_Dataset_CVPR_2023_paper.html"

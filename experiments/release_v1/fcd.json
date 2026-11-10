@@ -1,0 +1,76 @@
+{
+  "suite": "fcd",
+  "checkpoint_epoch": 10,
+  "checkpoint_sha256": "3ecdb0564afe519a78a2a091b29d5cd0254d1c464f36110dfdc87d84724f9134",
+  "index_manifest_sha256": "edd6c0024ff499a09e180e0cf8d1acdee66f285b5544a28346b6e74c5ffa0710",
+  "threshold": 0.5,
+  "batch_size": 4,
+  "conditions": {
+    "clean": {
+      "macro_dice": 0.40285100885372516,
+      "macro_iou": 0.33466653030796056,
+      "micro_precision": 0.6631990028209552,
+      "micro_recall": 0.31936897027556205,
+      "count": 2000,
+      "zero_overlap_images": 515,
+      "dice_change_from_clean": 0.0
+    },
+    "jpeg90": {
+      "macro_dice": 0.41250839311088555,
+      "macro_iou": 0.3365328936610808,
+      "micro_precision": 0.6998838850999397,
+      "micro_recall": 0.3266941043005119,
+      "count": 2000,
+      "zero_overlap_images": 358,
+      "dice_change_from_clean": 0.009657384257160395
+    },
+    "jpeg70": {
+      "macro_dice": 0.38516389154654807,
+      "macro_iou": 0.30927721787357193,
+      "micro_precision": 0.6567935526029187,
+      "micro_recall": 0.30406494034664866,
+      "count": 2000,
+      "zero_overlap_images": 413,
+      "dice_change_from_clean": -0.01768711730717709
+    },
+    "jpeg50": {
+      "macro_dice": 0.3486483494565979,
+      "macro_iou": 0.27098953256254327,
+      "micro_precision": 0.6041914939981496,
+      "micro_recall": 0.2672134437880413,
+      "count": 2000,
+      "zero_overlap_images": 439,
+      "dice_change_from_clean": -0.05420265939712726
+    },
+    "resize75": {
+      "macro_dice": 0.3447565020409296,
+      "macro_iou": 0.27033236034074315,
+      "micro_precision": 0.5200934884216767,
+      "micro_recall": 0.3109221258598103,
+      "count": 2000,
+      "zero_overlap_images": 625,
+      "dice_change_from_clean": -0.05809450681279554
+    },
+    "resize50": {
+      "macro_dice": 0.2635127912897941,
+      "macro_iou": 0.1875960983504021,
+      "micro_precision": 0.41923620977518977,
+      "micro_recall": 0.23195015404492844,
+      "count": 2000,
+      "zero_overlap_images": 551,
+      "dice_change_from_clean": -0.13933821756393105
+    },
+    "blur07": {
+      "macro_dice": 0.3494857160108105,
+      "macro_iou": 0.27571651567574035,
+      "micro_precision": 0.5484235579267527,
+      "micro_recall": 0.31016203893680117,
+      "count": 2000,
+      "zero_overlap_images": 637,
+      "dice_change_from_clean": -0.053365292842914636
+    }
+  },
+  "protocol": "Frozen weights, native 512x512 images, no tuning. JPEG uses Pillow quality and 4:2:0 subsampling; resize is bicubic down/up to original grid; blur radius 0.7. Masks unchanged.",
+  "limitations": "PROVISIONAL development split: source-document IDs unavailable in image/label keys. Exact RGB and exact dHash grouping cannot exclude related crops, different edits, or all near-duplicates. No source-disjoint generalization claim. Audit covers only selected candidates.",
+  "suite_note": "Separate FCD evaluation after freezing checkpoint and threshold. Some samples were inspected during loader development; not a pristine blind test. No claim of source separation from training."
+}

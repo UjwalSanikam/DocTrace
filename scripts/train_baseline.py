@@ -17,6 +17,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from doctrace.dataset import DocTamperDataset
 from doctrace.model import build_model
+from doctrace.augmentation import JpegTrainingDataset
 from overfit_small import loss_fn, save_preview
 
 
@@ -93,6 +94,7 @@ def main():
     parser.add_argument("--model", choices=["small", "resnet18"], default="small")
     parser.add_argument("--random-encoder", action="store_true", help="ResNet architecture control without ImageNet weights")
     parser.add_argument("--resume", help="Checkpoint with model and AdamW state; --epochs is additional epochs")
+    parser.add_argument("--augmentation", choices=["none", "jpeg"], default=None, help="Training-only JPEG augmentation; defaults to checkpoint setting or none")
     args = parser.parse_args()
     if args.epochs < 1 or args.batch_size < 1 or args.workers < 0 or args.lr <= 0:
         parser.error("Invalid training settings")
@@ -129,6 +131,8 @@ def main():
             if json.loads((resume_path.parent / filename).read_text()) != active_ids:
                 parser.error(f"Resume manifest mismatch: {filename}")
         start_epoch = int(resume["epoch"])
+    if args.augmentation is None:
+        args.augmentation = resume["config"].get("augmentation", "none") if resume else "none"
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -142,7 +146,8 @@ def main():
         "database": report["database"], "precision": "float32", "initialization": "ImageNet ResNet18 encoder; random decoder" if args.model == "resnet18" and not args.random_encoder else "random; no overfit weights",
         "architecture": "SmallUNet(base=16)" if args.model == "small" else "ResNet18UNet",
         "encoder_batchnorm": "frozen running stats; trainable affine" if args.model == "resnet18" else "not applicable",
-        "normalization": "ImageNet mean/std inside model; no resize/crop" if args.model == "resnet18" else "RGB 0-1", "loss": "BCE + per-image soft Dice", "augmentation": "none",
+        "normalization": "ImageNet mean/std inside model; no resize/crop" if args.model == "resnet18" else "RGB 0-1", "loss": "BCE + per-image soft Dice", "augmentation": args.augmentation,
+        "augmentation_note": "Worker RNG state is not checkpointed; resumed stochastic augmentations are not a bitwise continuation." if args.augmentation != "none" else "none",
         "start_epoch": start_epoch, "resume_shuffle_note": "Legacy checkpoint lacks RNG state; shuffle stream restarted" if resume and "loader_rng" not in resume else "RNG state saved/restored",
         "threshold": 0.5, "torch_version": str(torch.__version__), "gpu": torch.cuda.get_device_name(0),
         "split_limitation": report["limitation"], "authentic_document_evaluation": False,
@@ -155,7 +160,8 @@ def main():
     common = dict(batch_size=args.batch_size, num_workers=args.workers, pin_memory=True,
                   persistent_workers=args.workers > 0, worker_init_fn=seed_worker)
     generator = torch.Generator().manual_seed(args.seed)
-    train_loader = DataLoader(Subset(dataset, train_ids), shuffle=True, generator=generator, **common)
+    training_dataset = JpegTrainingDataset(dataset) if args.augmentation == "jpeg" else dataset
+    train_loader = DataLoader(Subset(training_dataset, train_ids), shuffle=True, generator=generator, **common)
     val_loader = DataLoader(Subset(dataset, val_ids), shuffle=False, **common)
     model = build_model(args.model, pretrained=resume is None and args.model == "resnet18" and not args.random_encoder).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0)

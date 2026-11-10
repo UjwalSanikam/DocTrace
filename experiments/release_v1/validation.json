@@ -1,0 +1,230 @@
+{
+  "epoch8": {
+    "suite": "validation",
+    "checkpoint_epoch": 8,
+    "checkpoint_sha256": "e11f09c234560ed04668bb41538fab82990aa4e3470cb7c257c8603baa9c460b",
+    "index_manifest_sha256": "0dec9e57c3a6f17c637c6ca63e9c5616c290e63784c64edcbba810285fa4c2e4",
+    "threshold": 0.5,
+    "batch_size": 4,
+    "conditions": {
+      "clean": {
+        "macro_dice": 0.4723752907900713,
+        "macro_iou": 0.38542952046818996,
+        "micro_precision": 0.5303949542294235,
+        "micro_recall": 0.5468258390168665,
+        "count": 2000,
+        "zero_overlap_images": 428,
+        "dice_change_from_clean": 0.0
+      },
+      "jpeg90": {
+        "macro_dice": 0.1543503298968339,
+        "macro_iou": 0.1103438513507469,
+        "micro_precision": 0.25197405872383216,
+        "micro_recall": 0.18039200045568893,
+        "count": 2000,
+        "zero_overlap_images": 1128,
+        "dice_change_from_clean": -0.3180249608932374
+      },
+      "jpeg70": {
+        "macro_dice": 0.11838437530841651,
+        "macro_iou": 0.07930224050043375,
+        "micro_precision": 0.1830294375333477,
+        "micro_recall": 0.13609630373033615,
+        "count": 2000,
+        "zero_overlap_images": 1149,
+        "dice_change_from_clean": -0.3539909154816548
+      },
+      "jpeg50": {
+        "macro_dice": 0.10310400344409702,
+        "macro_iou": 0.06689364935806211,
+        "micro_precision": 0.14285476043749393,
+        "micro_recall": 0.13873425347388443,
+        "count": 2000,
+        "zero_overlap_images": 1145,
+        "dice_change_from_clean": -0.36927128734597425
+      },
+      "resize75": {
+        "macro_dice": 0.2721208591542708,
+        "macro_iou": 0.20729591628922972,
+        "micro_precision": 0.3833073841786444,
+        "micro_recall": 0.37458842287888977,
+        "count": 2000,
+        "zero_overlap_images": 742,
+        "dice_change_from_clean": -0.20025443163580048
+      },
+      "resize50": {
+        "macro_dice": 0.20612676466642962,
+        "macro_iou": 0.15304006349272845,
+        "micro_precision": 0.32455962595216625,
+        "micro_recall": 0.2553422531283717,
+        "count": 2000,
+        "zero_overlap_images": 896,
+        "dice_change_from_clean": -0.2662485261236417
+      },
+      "blur07": {
+        "macro_dice": 0.33824483313976034,
+        "macro_iou": 0.2633073524446332,
+        "micro_precision": 0.4680432883869171,
+        "micro_recall": 0.4118672151533758,
+        "count": 2000,
+        "zero_overlap_images": 625,
+        "dice_change_from_clean": -0.13413045765031095
+      }
+    },
+    "protocol": "Frozen weights, native 512x512 images, no tuning. JPEG uses Pillow quality and 4:2:0 subsampling; resize is bicubic down/up to original grid; blur radius 0.7. Masks unchanged.",
+    "limitations": "PROVISIONAL development split: source-document IDs unavailable in image/label keys. Exact RGB and exact dHash grouping cannot exclude related crops, different edits, or all near-duplicates. No source-disjoint generalization claim. Audit covers only selected candidates.",
+    "suite_note": "Development robustness study on the same provisional validation set used for checkpoint selection."
+  },
+  "clean_control": {
+    "suite": "validation",
+    "checkpoint_epoch": 10,
+    "checkpoint_sha256": "c7c05445aebbdcb0e7841f96570f1eb70b5d0489a735d3a3042ceb0b89458152",
+    "index_manifest_sha256": "0dec9e57c3a6f17c637c6ca63e9c5616c290e63784c64edcbba810285fa4c2e4",
+    "threshold": 0.5,
+    "batch_size": 4,
+    "conditions": {
+      "clean": {
+        "macro_dice": 0.5121372843942497,
+        "macro_iou": 0.4232238756167944,
+        "micro_precision": 0.6361849343397851,
+        "micro_recall": 0.5672016127157485,
+        "count": 2000,
+        "zero_overlap_images": 399,
+        "dice_change_from_clean": 0.0
+      },
+      "jpeg90": {
+        "macro_dice": 0.1482801325075202,
+        "macro_iou": 0.10852515269695924,
+        "micro_precision": 0.27977809153011307,
+        "micro_recall": 0.16210582934779963,
+        "count": 2000,
+        "zero_overlap_images": 1176,
+        "dice_change_from_clean": -0.36385715188672946
+      },
+      "jpeg70": {
+        "macro_dice": 0.1073515663725894,
+        "macro_iou": 0.07119776639805284,
+        "micro_precision": 0.14798046147978378,
+        "micro_recall": 0.11734045130612282,
+        "count": 2000,
+        "zero_overlap_images": 1129,
+        "dice_change_from_clean": -0.40478571802166025
+      },
+      "jpeg50": {
+        "macro_dice": 0.09043570051962209,
+        "macro_iou": 0.05849579933563996,
+        "micro_precision": 0.11052170140080464,
+        "micro_recall": 0.10201394456614635,
+        "count": 2000,
+        "zero_overlap_images": 1159,
+        "dice_change_from_clean": -0.4217015838746276
+      },
+      "resize75": {
+        "macro_dice": 0.30545522660684266,
+        "macro_iou": 0.234728156384713,
+        "micro_precision": 0.4254411926770709,
+        "micro_recall": 0.40789503112864434,
+        "count": 2000,
+        "zero_overlap_images": 680,
+        "dice_change_from_clean": -0.206682057787407
+      },
+      "resize50": {
+        "macro_dice": 0.2293653371162772,
+        "macro_iou": 0.17229836943020074,
+        "micro_precision": 0.32638564149660854,
+        "micro_recall": 0.29429319021586503,
+        "count": 2000,
+        "zero_overlap_images": 881,
+        "dice_change_from_clean": -0.28277194727797245
+      },
+      "blur07": {
+        "macro_dice": 0.39296989097561996,
+        "macro_iou": 0.3136236631843317,
+        "micro_precision": 0.53161714137433,
+        "micro_recall": 0.4595579927519458,
+        "count": 2000,
+        "zero_overlap_images": 567,
+        "dice_change_from_clean": -0.1191673934186297
+      }
+    },
+    "protocol": "Frozen weights, native 512x512 images, no tuning. JPEG uses Pillow quality and 4:2:0 subsampling; resize is bicubic down/up to original grid; blur radius 0.7. Masks unchanged.",
+    "limitations": "PROVISIONAL development split: source-document IDs unavailable in image/label keys. Exact RGB and exact dHash grouping cannot exclude related crops, different edits, or all near-duplicates. No source-disjoint generalization claim. Audit covers only selected candidates.",
+    "suite_note": "Development robustness study on the same provisional validation set used for checkpoint selection."
+  },
+  "jpeg_augmented": {
+    "suite": "validation",
+    "checkpoint_epoch": 10,
+    "checkpoint_sha256": "3ecdb0564afe519a78a2a091b29d5cd0254d1c464f36110dfdc87d84724f9134",
+    "index_manifest_sha256": "0dec9e57c3a6f17c637c6ca63e9c5616c290e63784c64edcbba810285fa4c2e4",
+    "threshold": 0.5,
+    "batch_size": 4,
+    "conditions": {
+      "clean": {
+        "macro_dice": 0.4544651769812937,
+        "macro_iou": 0.37142981209831927,
+        "micro_precision": 0.6101557714905081,
+        "micro_recall": 0.449779961519846,
+        "count": 2000,
+        "zero_overlap_images": 470,
+        "dice_change_from_clean": 0.0
+      },
+      "jpeg90": {
+        "macro_dice": 0.2593680171989456,
+        "macro_iou": 0.20095995084194312,
+        "micro_precision": 0.3683270630657944,
+        "micro_recall": 0.2270146193956238,
+        "count": 2000,
+        "zero_overlap_images": 804,
+        "dice_change_from_clean": -0.1950971597823481
+      },
+      "jpeg70": {
+        "macro_dice": 0.19527518337122785,
+        "macro_iou": 0.14239216656776812,
+        "micro_precision": 0.2909202707450896,
+        "micro_recall": 0.1660249084242627,
+        "count": 2000,
+        "zero_overlap_images": 930,
+        "dice_change_from_clean": -0.25918999361006584
+      },
+      "jpeg50": {
+        "macro_dice": 0.15399609779555629,
+        "macro_iou": 0.10693186497759775,
+        "micro_precision": 0.23516269816855892,
+        "micro_recall": 0.13560436681328553,
+        "count": 2000,
+        "zero_overlap_images": 1019,
+        "dice_change_from_clean": -0.3004690791857374
+      },
+      "resize75": {
+        "macro_dice": 0.29397815922522547,
+        "macro_iou": 0.22873996878650796,
+        "micro_precision": 0.4463458600630986,
+        "micro_recall": 0.3283765409662258,
+        "count": 2000,
+        "zero_overlap_images": 769,
+        "dice_change_from_clean": -0.16048701775606822
+      },
+      "resize50": {
+        "macro_dice": 0.222106871665275,
+        "macro_iou": 0.16789729799291714,
+        "micro_precision": 0.3426167720697036,
+        "micro_recall": 0.21814433021494173,
+        "count": 2000,
+        "zero_overlap_images": 936,
+        "dice_change_from_clean": -0.23235830531601867
+      },
+      "blur07": {
+        "macro_dice": 0.36650555140619495,
+        "macro_iou": 0.28987082230602773,
+        "micro_precision": 0.5230355955834294,
+        "micro_recall": 0.37285634219065844,
+        "count": 2000,
+        "zero_overlap_images": 614,
+        "dice_change_from_clean": -0.08795962557509873
+      }
+    },
+    "protocol": "Frozen weights, native 512x512 images, no tuning. JPEG uses Pillow quality and 4:2:0 subsampling; resize is bicubic down/up to original grid; blur radius 0.7. Masks unchanged.",
+    "limitations": "PROVISIONAL development split: source-document IDs unavailable in image/label keys. Exact RGB and exact dHash grouping cannot exclude related crops, different edits, or all near-duplicates. No source-disjoint generalization claim. Audit covers only selected candidates.",
+    "suite_note": "Development robustness study on the same provisional validation set used for checkpoint selection."
+  }
+}

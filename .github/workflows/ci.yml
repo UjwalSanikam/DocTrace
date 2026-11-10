@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  test:
+    name: CPU tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install CPU-only dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy Pillow lmdb matplotlib
+
+      - name: Run test suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Check all source modules import cleanly
+        run: |
+          python -c "
+          import sys; sys.path.insert(0, 'src')
+          from doctrace.model import build_model, SmallUNet, ResNet18UNet
+          from doctrace.degradations import degrade, ela, CONDITIONS, PROBE_CONDITIONS
+          from doctrace.augmentation import JpegTrainingDataset
+          from doctrace.inference import Predictor, decode_image, starts, png_bytes, overlay
+          from doctrace.synthetic import make_document
+          from doctrace.regions import summarize_regions
+          print('All imports OK')
+          "

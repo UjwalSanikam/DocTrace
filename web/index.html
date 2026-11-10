@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DocTrace · Document inspection</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header class="top"><a class="brand" href="/" aria-label="DocTrace home"><span class="mark">d<span>·</span></span>DocTrace</a><span class="edition">DOCUMENT INSPECTION LAB <b>01</b></span><span class="connection" id="connection">Connecting to model…</span></header>
+<main>
+  <section class="heading"><div><p class="eyebrow">A CLOSER LOOK AT EVERY PIXEL</p><h1>Inspect the details.</h1><p class="intro">Localize possible text edits. Explore compression sensitivity and ELA forensics.</p></div><span class="badge">Research prototype</span></section>
+  <div class="workspace">
+    <aside class="sidebar">
+      <section class="card"><div class="section-label"><span>01</span><h2>Your document</h2></div>
+        <label class="drop" id="drop" for="file"><span class="upload-icon" aria-hidden="true">↥</span><strong>Choose an image</strong><span>or drop it here</span><small>PNG, JPEG, WebP · up to 8 MP / 24 MB</small></label>
+        <input type="file" id="file" accept="image/png,image/jpeg,image/webp" class="file-input">
+        <div class="file-info" id="file-info">No image selected</div>
+        <button class="sample" id="sample">Try a synthetic sample <span>↗</span></button>
+        <label class="check"><input type="checkbox" id="probe" checked><span>Check compression sensitivity<small>Runs jpeg90/70/50 &amp; blur probes. Shows worst-case map.</small></span></label>
+        <button class="primary" id="analyze" disabled>Analyze document <span>→</span></button>
+        <p class="privacy">Processed on this computer. Images stay in memory and are not saved by the app.</p>
+      </section>
+      <section class="card controls"><div class="section-label"><span>02</span><h2>Inspect &amp; export</h2></div>
+        <label class="range-label" for="threshold">Mask threshold <output id="threshold-value">0.50</output></label><input type="range" id="threshold" min="5" max="95" value="50" disabled>
+        <p class="hint">Lower values highlight more pixels. This is not a confidence setting.</p>
+        <label class="range-label" for="opacity">Overlay opacity <output id="opacity-value">45%</output></label><input type="range" id="opacity" min="10" max="90" value="45" disabled>
+        <div class="downloads"><button id="save-overlay" disabled>Overlay PNG ↙</button><button id="save-mask" disabled>Mask PNG ↙</button><button id="save-ela" disabled>ELA PNG ↙</button><button id="save-report" disabled>Analysis report ↙</button></div>
+      </section>
+      <section class="card regions-card" id="regions-card" hidden>
+        <div class="section-label"><span>03</span><h2>Suspicious regions</h2></div>
+        <div id="regions-list" class="regions-list"></div>
+        <p class="hint" style="margin-top:8px">Ranked by area. Bounding boxes in pixel coordinates (y₀,x₀ → y₁,x₁).</p>
+      </section>
+      <p class="model-meta" id="model-meta">Loading model details…</p>
+    </aside>
+    <section class="viewer">
+      <div class="viewer-head"><div class="tabs" role="tablist" aria-label="Inspection view"><button role="tab" aria-selected="true" data-view="overlay">Overlay</button><button role="tab" aria-selected="false" data-view="probability">Response map</button><button role="tab" aria-selected="false" data-view="sensitivity" disabled>Sensitivity</button><button role="tab" aria-selected="false" data-view="worst_case" disabled>Worst-case</button><button role="tab" aria-selected="false" data-view="ela" disabled>ELA</button><button role="tab" aria-selected="false" data-view="original">Original</button></div><span class="dimensions" id="dimensions">—</span></div>
+      <div class="stage" id="stage"><div class="empty" id="empty"><svg viewBox="0 0 160 180" width="130" height="145" aria-hidden="true"><rect x="28" y="8" width="108" height="150" rx="4" fill="#fff" stroke="#c9cec8"/><path d="M47 40h66M47 52h48M47 78h66M47 90h54M47 116h66M47 128h35" stroke="#bcc4bc" stroke-width="4"/><rect x="73" y="70" width="46" height="16" fill="#f1a88c" opacity=".75"/><path d="M15 62V31h30M119 144h30v-31" stroke="#db704c" stroke-width="3" fill="none"/></svg><h2>A document, a closer look.</h2><p>Choose an image to explore the model's response,<br>or try the sample to get familiar with the tools.</p><span class="empty-note">Full-page images are inspected in overlapping tiles.</span></div><canvas id="canvas" hidden aria-label="Document analysis visualization"></canvas><div class="busy" id="busy" hidden><span class="spinner"></span><strong>Inspecting your document</strong><span>Running neural prediction + ELA + multi-probe…</span></div></div>
+      <div class="legend"><span><i id="legend-color"></i><span id="legend-text">Coral marks pixels above the selected threshold</span></span><span id="elapsed">Ready when you are</span></div>
+      <div class="stats"><div><span>Flagged area</span><strong id="area">—</strong><small>of the document's pixels</small></div><div><span>Worst-case flips</span><strong id="flips">—</strong><small>pixels changed by any probe</small></div><div><span>Inspection scale</span><strong id="tiles">—</strong><small>overlapping 512 × 512 tiles</small></div></div>
+      <p class="notice"><strong>A signal to inspect, not a verdict.</strong> Highlights can include ordinary text and miss edits. ELA reveals JPEG compression history differences — it is a forensic aid, not proof of tampering. Compression sensitivity shows prediction instability, not calibrated uncertainty.</p>
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+    </section>
+  </div>
+</main><footer><span>DocTrace / Computer vision research</span><span>Native-scale inspection · Local processing · Transparent limitations</span></footer>
+</body></html>

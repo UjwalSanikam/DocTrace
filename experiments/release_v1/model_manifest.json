@@ -1,0 +1,17 @@
+{
+  "filename": "model.pt",
+  "sha256": "757b8e98645181982de852fc3e7ddf0439bf5b1b9115ffb67e9e435e7df1a35b",
+  "source_checkpoint_sha256": "3ecdb0564afe519a78a2a091b29d5cd0254d1c464f36110dfdc87d84724f9134",
+  "epoch": 10,
+  "bytes": 50338371,
+  "config": {
+    "model": "resnet18",
+    "architecture": "ResNet18UNet",
+    "normalization": "ImageNet mean/std inside model; no resize/crop",
+    "augmentation": "jpeg",
+    "precision": "float32",
+    "threshold": 0.5,
+    "split_limitation": "PROVISIONAL development split: source-document IDs unavailable in image/label keys. Exact RGB and exact dHash grouping cannot exclude related crops, different edits, or all near-duplicates. No source-disjoint generalization claim. Audit covers only selected candidates."
+  },
+  "note": "Local inference artifact. Redistribution rights are not assumed; the weights are excluded from Git."
+}

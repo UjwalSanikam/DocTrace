@@ -1,0 +1,29 @@
+{
+  "suite": "synthetic",
+  "checkpoint_epoch": 10,
+  "checkpoint_sha256": "3ecdb0564afe519a78a2a091b29d5cd0254d1c464f36110dfdc87d84724f9134",
+  "index_manifest_sha256": "60755485e62c4d66d920ccb3ddb946732dcffa513cd2fed6a0432ae77969ff1a",
+  "threshold": 0.5,
+  "batch_size": 4,
+  "conditions": {
+    "clean": {
+      "count": 64,
+      "mean_false_positive_pixel_fraction": 0.025385797023773193,
+      "median_false_positive_pixel_fraction": 0.025041580200195312,
+      "p95_false_positive_pixel_fraction": 0.031859779357910144,
+      "documents_with_any_predicted_pixel": 64,
+      "documents_with_at_least_0.1_percent_predicted_area": 64
+    },
+    "jpeg70": {
+      "count": 64,
+      "mean_false_positive_pixel_fraction": 0.025555670261383057,
+      "median_false_positive_pixel_fraction": 0.025020599365234375,
+      "p95_false_positive_pixel_fraction": 0.03853759765625,
+      "documents_with_any_predicted_pixel": 64,
+      "documents_with_at_least_0.1_percent_predicted_area": 64
+    }
+  },
+  "protocol": "Frozen weights, native 512x512 images, no tuning. JPEG uses Pillow quality and 4:2:0 subsampling; resize is bicubic down/up to original grid; blur radius 0.7. Masks unchanged.",
+  "limitations": "PROVISIONAL development split: source-document IDs unavailable in image/label keys. Exact RGB and exact dHash grouping cannot exclude related crops, different edits, or all near-duplicates. No source-disjoint generalization claim. Audit covers only selected candidates.",
+  "suite_note": "64 procedural, unedited documents. Pixel false positives only; not representative of real authentic documents. No document-authenticity accuracy is claimed."
+}
